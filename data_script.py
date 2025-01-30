@@ -123,21 +123,18 @@ def load_fg_data(input_rmf_path, fg_types, n_chains_per_fg, n_beads_per_fg, star
             for nup_i, fg_type in enumerate(fg_types):
                 for chain_i in range(n_chains_per_fg[nup_i]):
                     for bead_i in range(n_beads_per_fg[nup_i]):
-                        try:
-                            coord = rff.get(type2chains[fg_type][chain_i][bead_i]).get_translation()
-                            trajectories[fg_type][chain_i, bead_i, 0, traj_i] = coord[0] / 10
-                            trajectories[fg_type][chain_i, bead_i, 1, traj_i] = coord[1] / 10
-                            trajectories[fg_type][chain_i, bead_i, 2, traj_i] = coord[2] / 10
-                        except:
-                            pass
+                        coord = rff.get(type2chains[fg_type][chain_i][bead_i]).get_translation()
+                        trajectories[fg_type][chain_i, bead_i, 0, traj_i] = coord[0] / 10
+                        trajectories[fg_type][chain_i, bead_i, 1, traj_i] = coord[1] / 10
+                        trajectories[fg_type][chain_i, bead_i, 2, traj_i] = coord[2] / 10
             if one_frame_from_each:
                 break
     return trajectories    
 
 
 fg_types = ['Nsp1', 'Nup100', 'Nup116', 'Nup159', 'Nup49', 'Nup57', 'Nup145', 'Nup1', 'Nup60']
-n_chains_per_fg = [48, 16, 16, 16, 32, 32, 16, 72, 16]
-n_beads_per_fg = [32, 40, 48, 34, 14, 15, 13, 40, 12]
+n_chains_per_fg = [48, 16, 16, 16, 32, 32, 16, 8, 16]
+n_beads_per_fg = [32, 40, 48, 34, 14, 15, 13, 44, 12]
 start_t = 150000
 end_t = 160000
 step_t = 100
@@ -168,7 +165,7 @@ def process_sim(i):
             step_t=100,
             frames_per_file=1,
             one_frame_from_each=True)
-    with open(f"data/singles/{i}/150-160-fgs.pickle", "wb") as f:
+    with open(f"data/singles/{i}/{int(start_t/1000)}-{int(end_t/1000)}-fgs.pickle", "wb") as f:
         pickle.dump(trajectories, f)
 
 with ThreadPoolExecutor(max_workers=None) as executor:
