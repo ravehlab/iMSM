@@ -1,3 +1,7 @@
 *.pickle
 *.out
+*.png
+*.svg
+*.html
+*.pyc
 .vscode
