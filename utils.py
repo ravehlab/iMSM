@@ -29,3 +29,27 @@ def reorder_transition_matrix(transition_matrix, old_order, new_order):
             reordered_matrix[new_i, new_j] = transition_matrix[i, j]
             
     return reordered_matrix
+
+def infinitesimal_generator(P, dt=1.0):
+    """
+    Estimate the infinitesimal generator matrix Q from transition matrix P
+    Implementation similar to: https://transitionmatrix.readthedocs.io/en/latest/_modules/transitionMatrix/model.html#TransitionMatrix.generator
+    Units of Q are rate, i.e. 1/time. 
+    expm(Q * dt) will result in P.
+    
+    Examples:
+    If the units of P are transition probablities per 100ns,
+    then the units of Q will be the transition rate 1 / (100ns * dt).
+    
+    
+    Parameters:
+    P : numpy.ndarray
+        Transition matrix
+    dt : float, optional
+        The time scale parameter. 
+    
+    Returns:
+    numpy.ndarray
+        Infinitesimal generator matrix Q. 
+    """
+    return sp.linalg.logm(P) / dt
