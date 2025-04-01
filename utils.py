@@ -1,4 +1,7 @@
 import numpy as np
+import scipy as sp
+import os
+import re
 
 def reorder_transition_matrix(transition_matrix, old_order, new_order):
     """
@@ -53,3 +56,35 @@ def infinitesimal_generator(P, dt=1.0):
         Infinitesimal generator matrix Q. 
     """
     return sp.linalg.logm(P) / dt
+
+def transition_from_generator(Q, dt=1.0):
+    return sp.linalg.expm(Q * dt)
+
+def get_max_pb_file(folder_path):
+    """
+    Returns the path to the .pb file with the highest number in the given folder.
+    
+    Args:
+        folder_path (str): Path to the folder containing numbered .pb files
+        
+    Returns:
+        str: Full path to the highest numbered .pb file, or None if no matching files
+    """
+    if not os.path.isdir(folder_path):
+        raise ValueError(f"'{folder_path}' is not a valid directory")
+    
+    max_num = -1
+    max_file = None
+    
+    # Regular expression to match files like "100.pb"
+    pattern = re.compile(r'^(\d+)\.pb$')
+    
+    for filename in os.listdir(folder_path):
+        match = pattern.match(filename)
+        if match:
+            num = int(match.group(1))
+            if num > max_num:
+                max_num = num
+                max_file = filename
+    
+    return os.path.join(folder_path, max_file) if max_file else None
