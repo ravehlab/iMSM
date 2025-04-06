@@ -1,0 +1,75 @@
+=================================
+=== 000_ntr_count_stats.ipynb ===
+=================================
+
+Unbound/Bound stats and graphs for rod.
+
+============================================
+=== 000_visualize_trajectory_paths.ipynb ===
+============================================
+
+Trajectory path visualization. 2D (projected) and 3D. Density too.
+
+==========================================
+=== 001_PRC_extract_trajectories.ipynb ===
+==========================================
+
+Generates arrays of trajectories from rmf files and pickles them.
+
+====================================
+=== 002_PRC_spatial_chains.ipynb ===
+====================================
+
+Categorizes and generates first order markov transition matrices (spatial categorization).
+
+====================================
+=== 003_EXP_spatial_chains.ipynb ===
+====================================
+
+Visuzalizes first order transition matrices, and matching rate matrices (spatial categorization).
+
+========================================
+=== 004_PRC_interaction_chains.ipynb ===
+========================================
+
+Categorizes and generates first order markov transition matrices (interaction categorization).
+
+========================================
+=== 005_EXP_interaction_chains.ipynb ===
+========================================
+
+- Visuzalizes first order transition matrices, and matching rate matrices (interaction categorization).
+- Visualizes discrete graph view of these matrices.
+- ^^ for mutations. 
+
+=================================
+=== 006_EXP_verticality.ipynb ===
+=================================
+
+Calculates transport verticatilty scores and matrices. 
+
+======================================
+=== 007_EXP_model_validation.ipynb ===
+======================================
+
+- Calculates transport rates of markov models.
+- Calculates stationary density of original model and markov model side by side.
+
+=================================
+=== 008_PRC_multi_scale.ipynb ===
+=================================
+
+- Given a markov transition matrix (interaction categorization), generates a subscaled matrix with grouped states.
+
+==================================
+=== 009_EXP_markovianity.ipynb ===
+==================================
+
+Autocorrelation of markov models.
+
+=================================================
+=== 010_PRC_extended_interaction_chains.ipynb ===
+=================================================
+
+Given categorized trajectories via 004_PRC_interaction_chains.ipynb.
+Categorizes them further to account for memory effects. 
