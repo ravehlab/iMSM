@@ -1,7 +1,33 @@
 import numpy as np
 import scipy as sp
+import pickle
 import os
+import sys
 import re
+import uuid
+import importlib.util
+
+
+def import_reload(file_path, function_name):
+    # Generate a random module name to avoid conflicts
+    module_name = f"temp_module_{uuid.uuid4().hex[:8]}"
+    # Set up the spec
+    spec = importlib.util.spec_from_file_location(module_name, file_path)
+    if spec is None:
+        raise FileNotFoundError(f"Could not find file: {file_path}")
+    # Create the module
+    module = importlib.util.module_from_spec(spec)
+    # Add the module to sys.modules
+    sys.modules[module_name] = module
+    # Execute the module
+    spec.loader.exec_module(module)
+    # Get the specific function
+    try:
+        function = getattr(module, function_name)
+        return function
+    except AttributeError:
+        raise AttributeError(f"Function '{function_name}' not found in {file_path}")
+
 
 def reorder_transition_matrix(transition_matrix, old_order, new_order):
     """
@@ -32,6 +58,50 @@ def reorder_transition_matrix(transition_matrix, old_order, new_order):
             reordered_matrix[new_i, new_j] = transition_matrix[i, j]
             
     return reordered_matrix
+
+def z_order_interactions_transition_matrix(tm, states):
+    """old version (no memory)"""
+    with open(f"data/anchor_coordinates.pickle", "rb") as f:
+        anchor_coordinates = pickle.load(f)
+        
+    # Sort anchor coordinates by Z
+    anchor_coordinates = dict(sorted(anchor_coordinates.items(), key=lambda x: x[1][2]))
+    
+    for key in list(anchor_coordinates.keys()):
+        if key not in states:
+            states.append(key)
+            tm = np.vstack([tm, np.zeros(tm.shape[1])])
+            tm = np.hstack([tm, np.zeros((tm.shape[0], 1))])
+    
+    
+    new_states = ["nuc"] + list(anchor_coordinates.keys()) + ["cyt"]
+    tm = reorder_transition_matrix(tm, states, new_states)
+    return tm, new_states
+
+def z_order_interactionsmem_transition_matrix(tm, states):
+    """new version (memory). ordering is splitting the matrix into 2 parts, memory and non memory.
+    each is ordered by z within itself."""
+    
+    with open(f"data/anchor_coordinates.pickle", "rb") as f:
+        anchor_coordinates = pickle.load(f)
+        
+    # Sort anchor coordinates by Z
+    anchor_coordinates = dict(sorted(anchor_coordinates.items(), key=lambda x: x[1][2]))
+    
+    for key in list(anchor_coordinates.keys()):
+        if key not in states:
+            states.append(key)
+            tm = np.vstack([tm, np.zeros(tm.shape[1])])
+            tm = np.hstack([tm, np.zeros((tm.shape[0], 1))])
+        if key + "_mem" not in states:
+            states.append(key + "_mem")
+            tm = np.vstack([tm, np.zeros(tm.shape[1])])
+            tm = np.hstack([tm, np.zeros((tm.shape[0], 1))])
+    
+    fgs_by_z = list(anchor_coordinates.keys())
+    new_states = ["nuc"] + fgs_by_z + ["cyt"] + ["nuc_mem"] + [fg + "_mem" for fg in fgs_by_z] + ["cyt_mem"]
+    tm = reorder_transition_matrix(tm, states, new_states)
+    return tm, new_states
 
 def infinitesimal_generator(P, dt=1.0):
     """
