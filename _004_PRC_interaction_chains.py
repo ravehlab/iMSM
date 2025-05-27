@@ -69,6 +69,9 @@ def categorize_diffusers(diffuser_coordinates, fg_coordinates, k, max_distance=5
 
 
 def categorize_diffusers_over_time(diffuser_trajectories, fg_trajectories, k, step=1):
+    """
+    returns array of shape [n_diffusers, k(closest), time]
+    """
     n_diffusers = diffuser_trajectories.shape[0]
     n_t = diffuser_trajectories.shape[2]
     n_t2 = fg_trajectories["Nup57"].shape[3]
@@ -185,7 +188,7 @@ def generate_transition_matrix(data, fg_types, n_chains_per_fg, init_1 = False, 
 ###########################################################################################
 
 
-def categorize_multiples(sim_indexes, sim_times, load_path_prefix="data/singles/", step=1, save_file_path=None):
+def categorize_multiples(sim_indexes, sim_times, load_path_prefix="data/singles/", step=1, save_file_path=None, k=1):
     i_time_iterator = [(sim_i, time_i, time) for sim_i in sim_indexes for time_i, time in enumerate(sim_times)]
 
 
@@ -198,7 +201,7 @@ def categorize_multiples(sim_indexes, sim_times, load_path_prefix="data/singles/
             diffuser_trajectories = pickle.load(f)
         with open(f"{load_path_prefix}/{sim_i}/{time}-fgs.pickle", "rb") as f:
             fg_trajectories = pickle.load(f)
-        categorized = categorize_diffusers_over_time(diffuser_trajectories, fg_trajectories, 1, step=step)
+        categorized = categorize_diffusers_over_time(diffuser_trajectories, fg_trajectories, k=k, step=step)
         arrays[sim_i - 1][time_i] = categorized
 
     num_processes = len(os.sched_getaffinity(0))
@@ -211,8 +214,15 @@ def categorize_multiples(sim_indexes, sim_times, load_path_prefix="data/singles/
 
     if save_file_path is not None:
         with open(save_file_path, "wb") as f:
-            pickle.dump(all[:, 0, :], f)
-    return all[:, 0, :]
+            if k == 1:
+                pickle.dump(all[:, 0, :], f)
+            else:
+                pickle.dump(all, f)
+    if k == 1:
+        return all[:, 0, :]
+    else:
+        return all
+    
 
 def generate_transition_matrix_from_categorized(load_categorized_path,
                                                 save_file_path,

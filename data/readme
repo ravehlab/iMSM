@@ -1,0 +1,4 @@
+categorized - contains catergorized trajectories (fg categorization)
+clusterings - contains cluster centers
+embedded - contains trajectories in different embedding space (pre clustering)
+clustered - contains clustered trajectories

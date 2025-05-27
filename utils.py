@@ -6,27 +6,28 @@ import sys
 import re
 import uuid
 import importlib.util
+import pydtmc
 
 
-def import_reload(file_path, function_name):
-    # Generate a random module name to avoid conflicts
-    module_name = f"temp_module_{uuid.uuid4().hex[:8]}"
-    # Set up the spec
-    spec = importlib.util.spec_from_file_location(module_name, file_path)
-    if spec is None:
-        raise FileNotFoundError(f"Could not find file: {file_path}")
-    # Create the module
-    module = importlib.util.module_from_spec(spec)
-    # Add the module to sys.modules
-    sys.modules[module_name] = module
-    # Execute the module
-    spec.loader.exec_module(module)
-    # Get the specific function
-    try:
-        function = getattr(module, function_name)
-        return function
-    except AttributeError:
-        raise AttributeError(f"Function '{function_name}' not found in {file_path}")
+# def import_reload(file_path, function_name):
+#     # Generate a random module name to avoid conflicts
+#     module_name = f"temp_module_{uuid.uuid4().hex[:8]}"
+#     # Set up the spec
+#     spec = importlib.util.spec_from_file_location(module_name, file_path)
+#     if spec is None:
+#         raise FileNotFoundError(f"Could not find file: {file_path}")
+#     # Create the module
+#     module = importlib.util.module_from_spec(spec)
+#     # Add the module to sys.modules
+#     sys.modules[module_name] = module
+#     # Execute the module
+#     spec.loader.exec_module(module)
+#     # Get the specific function
+#     try:
+#         function = getattr(module, function_name)
+#         return function
+#     except AttributeError:
+#         raise AttributeError(f"Function '{function_name}' not found in {file_path}")
 
 
 def reorder_transition_matrix(transition_matrix, old_order, new_order):
@@ -77,6 +78,17 @@ def z_order_interactions_transition_matrix(tm, states):
     new_states = ["nuc"] + list(anchor_coordinates.keys()) + ["cyt"]
     tm = reorder_transition_matrix(tm, states, new_states)
     return tm, new_states
+
+def z_order_get_only_state_to_idx_dict():
+    with open(f"data/anchor_coordinates.pickle", "rb") as f:
+        anchor_coordinates = pickle.load(f)
+        
+    # Sort anchor coordinates by Z
+    anchor_coordinates = dict(sorted(anchor_coordinates.items(), key=lambda x: x[1][2]))
+    
+    states = ["nuc"] + list(anchor_coordinates.keys()) + ["cyt"]
+    state_to_idx = {state: idx for idx, state in enumerate(states)}
+    return state_to_idx
 
 def z_order_interactionsmem_transition_matrix(tm, states):
     """new version (memory). ordering is splitting the matrix into 2 parts, memory and non memory.
@@ -158,3 +170,11 @@ def get_max_pb_file(folder_path):
                 max_file = filename
     
     return os.path.join(folder_path, max_file) if max_file else None
+
+def mean_first_passage_time(P, states, start_states, target_states):
+    mc = pydtmc.MarkovChain(P, states=states)
+    return mc.mean_first_passage_times_between(start_states, target_states)
+
+def stationary_distribution(P):
+    mc = pydtmc.MarkovChain(P)
+    return np.array(mc.pi[0])

@@ -11,18 +11,53 @@ def get_most_prominent_string(arr):
     most_prominent = unique_values[max_index]
     most_prominent_count = counts[max_index]
     fraction = most_prominent_count / len(arr)
-    return most_prominent, fraction
+    return most_prominent, fraction, len(unique_values)
 
 def memory_categorization(categorized_trajectory, p, window_size):
     """
     Given categorized trajectories via 004_PRC_interaction_chains.ipynb.
     Categorizes them further to account for memory effects. 
     """
+    # new_categorized = np.copy(categorized_trajectory)
+    # for i in range(window_size, len(categorized_trajectory)):
+    #     most_prominent, fraction, _ = get_most_prominent_string(categorized_trajectory[i-window_size:i])
+    #     if fraction > p:
+    #         new_categorized[i] = most_prominent + "_mem"
+    # return new_categorized
+    
     new_categorized = np.copy(categorized_trajectory)
-    for i in range(window_size, len(categorized_trajectory)):
-        most_prominent, fraction = get_most_prominent_string(categorized_trajectory[i-window_size:i])
+    i = window_size
+    len_categorized = len(categorized_trajectory)
+    while i < len_categorized:
+        most_prominent, fraction, _ = get_most_prominent_string(categorized_trajectory[i-window_size:i])
         if fraction > p:
-            new_categorized[i] = most_prominent + "_mem"
+            new_categorized[i-window_size:i] = most_prominent
+            i += window_size
+        else:
+            i += 1
+    return new_categorized
+
+def memory_categorization_2(categorized_trajectory, n, window_size):
+    new_categorized = np.copy(categorized_trajectory)
+    i = window_size
+    len_categorized = len(categorized_trajectory)
+    while i < len_categorized:
+        most_prominent, _, n_uniques = get_most_prominent_string(categorized_trajectory[i-window_size:i])
+        if n_uniques <= n:
+            new_categorized[i-window_size:i] = most_prominent
+            i += window_size
+        else:
+            i += 1
+        
+        # if n_uniques <= n:
+        #     if (prev_mem is not None) and (prev_mem in categorized_trajectory[i-window_size:i]):
+        #         new_categorized[i] = prev_mem
+        #     else:
+        #         new_categorized[i] = most_prominent
+        #         prev_mem = most_prominent
+        # else:
+        #     if prev_mem is not None:
+        #         prev_mem = None
     return new_categorized
 
 
@@ -111,9 +146,8 @@ def generate_transition_matrix(data, fg_types, n_chains_per_fg, init_1 = False, 
     n_states = len(states)
     
     # Create transition matrix
-    if init_1: transition_matrix = np.ones((n_states, n_states)) * 0.1
+    if init_1: transition_matrix = np.ones((n_states, n_states)) * 1e-7
     else: transition_matrix = np.zeros((n_states, n_states))
-    transition_matrix += add_to_diag * np.eye(n_states)
     
     # Fill transition matrix with probabilities
     for i, state_i in enumerate(states):
@@ -131,8 +165,10 @@ def generate_transition_matrix(data, fg_types, n_chains_per_fg, init_1 = False, 
         transition_matrix[0:-4, 0:-4] = eightwise_symmetrize(transition_matrix[0:-4, 0:-4])
         # transition_matrix[216:-4, 216:-4] = eightwise_symmetrize(transition_matrix[216:-4, 216:-4])
         # transition_matrix[0:216, 0:216] = eightwise_symmetrize(transition_matrix[0:216, 0:216])
+        
     transition_matrix = normalize_rows(transition_matrix)
-    
+    transition_matrix = (1 - add_to_diag) * transition_matrix + add_to_diag * np.eye(n_states)
+
     return transition_matrix, states
 
 

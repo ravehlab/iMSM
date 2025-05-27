@@ -1,11 +1,16 @@
 import numpy as np
 import pickle
-from utils import reorder_transition_matrix, get_max_pb_file, z_order_interactionsmem_transition_matrix, z_order_interactions_transition_matrix
 import matplotlib.pyplot as plt
 import os
 import multiprocessing as mp
 import seaborn as sns
 import concurrent.futures
+# --
+import importlib
+import utils
+importlib.reload(utils)
+from utils import reorder_transition_matrix, get_max_pb_file, z_order_interactionsmem_transition_matrix, z_order_interactions_transition_matrix, mean_first_passage_time
+# --
 
 
 
@@ -21,7 +26,20 @@ def sim_mm(tm, length=1000, init_dist=None):
         cur_state = np.random.choice(range(len(tm)), p=tm[cur_state])
         sim.append(cur_state)
     return sim
-        
+
+def _sim_mm_parallel(args):
+        tm, series_len, init_dist = args
+        series = sim_mm(tm, length=series_len - 1, init_dist=init_dist)
+        return series
+
+def sim_mm_parallel(tm, n_series, length=1000, init_dist=None):
+    """returns a 2D array of shape (n_series, length) which contains mm runs. Utilizes multiple cores for speedup."""
+    args_list = [(tm, length, init_dist)] * n_series
+    max_workers = len(os.sched_getaffinity(0))
+    with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
+        synthetic_data = np.array(list(executor.map(_sim_mm_parallel, args_list)))
+    return synthetic_data
+    
         
 def calc_transports(sim, bottom_states, top_states):
     transports = 0
@@ -50,10 +68,12 @@ def mm_permiability_from_path(matrix_path, n_sims=1000, sim_length=1000, bottom_
     else: tm, states = z_order_interactions_transition_matrix(tm, states)
     
     # Simulate
+    synthetic_data = sim_mm_parallel(tm, n_series=n_sims, length=sim_length, init_dist=init_dist)
+    
     transports = []
     for i in range(n_sims):
-        sim = sim_mm(tm, length=sim_length, init_dist=init_dist)
-        transports.append(calc_transports(sim, bottom_states, top_states))
+        # sim = sim_mm(tm, length=sim_length, init_dist=init_dist)
+        transports.append(calc_transports(synthetic_data[i], bottom_states, top_states))
         
     transport_events = np.sum(transports)
     sim_length_us = sim_length / 100
@@ -65,8 +85,56 @@ def mm_permiability_from_path(matrix_path, n_sims=1000, sim_length=1000, bottom_
     
     return perm
 
+def mm_permiability_from_path_fast(matrix_path, mem=False, bottom_states=None, top_states=None):
+    with open(matrix_path, "rb") as f:
+        tm, states = pickle.load(f)
+    
+    if mem: tm, states = z_order_interactionsmem_transition_matrix(tm, states)
+    else: tm, states = z_order_interactions_transition_matrix(tm, states)
+    
+    # Simulate
+    mfpt = mean_first_passage_time(tm, states, bottom_states, top_states) # units: 100ns
+    mfpt_s = 1e-7 * mfpt # units: s
+    transport_events_per_s = 1 / mfpt_s # units: 1/s
+    concentration_uM = 50/250 # approx, single molecule
+    
+    # units : n_events / s / uM / NPC 
+    perm = transport_events_per_s / concentration_uM
+    
+    return perm
+
 def md_permiability_from_path(traj_path, n_sims=1000, sim_length=1000, bottom_states=None, top_states=None):
-    # todo
+    with open (traj_path, 'rb') as f:
+        data = pickle.load(f)
+        
+    # convert data to numbers by z axis
+    with open(f"data/anchor_coordinates.pickle", "rb") as f:
+        anchor_coordinates = pickle.load(f)
+    anchor_coordinates = dict(sorted(anchor_coordinates.items(), key=lambda x: x[1][2]))
+    new_states = ["nuc"] + list(anchor_coordinates.keys()) + ["cyt"]
+    state_to_index = {state: i for i, state in enumerate(new_states)}
+    vectorized_lookup = np.vectorize(lambda x: state_to_index.get(x, 0))  # 0 is default if key not found
+    data = vectorized_lookup(data)
+    
+    selected_indices = np.random.choice(data.shape[0], size=n_sims, replace=False)
+    data = data[selected_indices]
+    if data.shape[1] < sim_length:
+        raise ValueError("The selected series length is longer than the data series length.")
+    data = data[:, -sim_length:]
+    
+    transports = []
+    for i in range(n_sims):
+        transports.append(calc_transports(data[i], bottom_states, top_states))
+    
+    transport_events = np.sum(transports)
+    sim_length_us = sim_length / 100
+    sim_length_s = sim_length_us / 1e6
+    concentration_uM = n_sims / 5 # approx
+    
+    # units : n_events / s / uM / NPC 
+    perm = transport_events / (sim_length_s * concentration_uM)
+    
+    return perm
 
 
 def plot_side_by_side_histograms(array1, array2, bins=10, labels=None, titles=None, figsize=(12, 5)):
@@ -136,10 +204,7 @@ def plot_side_by_side_histograms(array1, array2, bins=10, labels=None, titles=No
     plt.show()
     
 
-def _get_mm_empirical_single(args):
-        tm, series_len, init_dist = args
-        series = sim_mm(tm, length=series_len - 1, init_dist=init_dist)
-        return series
+
 
 def get_mm_empirical_distribution(tm_path, n_series, series_len, mem=False, init_dist=None):
     
@@ -151,24 +216,45 @@ def get_mm_empirical_distribution(tm_path, n_series, series_len, mem=False, init
     if mem: tm, states = z_order_interactionsmem_transition_matrix(tm, states)
     else: tm, states = z_order_interactions_transition_matrix(tm, states)
         
-        
-    # generate markov data in parallel
-    args_list = [(tm, series_len, init_dist)] * n_series
-    
-    max_workers = len(os.sched_getaffinity(0))
-    with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
-        synthetic_data = np.array(list(executor.map(_get_mm_empirical_single, args_list)))
+    synthetic_data = sim_mm_parallel(tm, length=series_len, init_dist=init_dist)
     if mem: synthetic_data[synthetic_data > 217] = synthetic_data[synthetic_data > 217] - 218 
     synthetic_data = synthetic_data.flatten()
     
     return np.histogram(synthetic_data, bins=218, density=True)[0]  # Returns the histogram of the data
+
+def get_mm_stationary_distribution(tm_path, mem=False):
+    with open(tm_path, "rb") as f:
+        tm, states = pickle.load(f)
+        
+    # reorder matrix
+    if mem: tm, states = z_order_interactionsmem_transition_matrix(tm, states)
+    else: tm, states = z_order_interactions_transition_matrix(tm, states)
     
+    #We have to transpose so that Markov transitions correspond to right multiplying by a column vector.  np.linalg.eig finds right eigenvectors.
+    evals, evecs = np.linalg.eig(tm.T)
+    evec1 = evecs[:,np.isclose(evals, 1)]
+
+    #Since np.isclose will return an array, we've indexed with an array
+    #so we still have our 2nd axis.  Get rid of it, since it's only size 1.
+    evec1 = evec1[:,0]
+
+    stationary = evec1 / evec1.sum()
+
+    #eigs finds complex eigenvalues and eigenvectors, so you'll want the real part.
+    stationary = stationary.real
+    
+    if mem: stationary = stationary[:218] + stationary[218:]
+    return stationary
     
 def get_md_empiricial_distribution(traj_path, n_series, series_len):
         # load real data
     with open (traj_path, 'rb') as f:
         data = pickle.load(f)
 
+    k_closest = data.shape[1]
+    n_series *= k_closest
+    data = np.vstack([data[:, i, :] for i in range(data.shape[1])])
+    
     # convert data to numbers by z axis
     with open(f"data/anchor_coordinates.pickle", "rb") as f:
         anchor_coordinates = pickle.load(f)
