@@ -29,6 +29,23 @@ import pydtmc
 #     except AttributeError:
 #         raise AttributeError(f"Function '{function_name}' not found in {file_path}")
 
+def get_sorted_anchor_coordinates():
+    with open(f"data/anchor_coordinates.pickle", "rb") as f:
+        anchor_coordinates = pickle.load(f)
+        
+    # Sort anchor coordinates by Z
+    anchor_coordinates = dict(sorted(anchor_coordinates.items(), key=lambda x: x[1][2]))
+    return anchor_coordinates
+
+def get_sorted_anchor_coordinates_np():
+    """
+    return sorted anchor coordinates as a numpy array. shape - (216, 3)
+    """
+    anchor_coordinates = get_sorted_anchor_coordinates()
+    # Convert to numpy array
+    sorted_keys = list(anchor_coordinates.keys())
+    sorted_values = np.array([anchor_coordinates[key] for key in sorted_keys])
+    return sorted_keys, sorted_values
 
 def reorder_transition_matrix(transition_matrix, old_order, new_order):
     """
@@ -62,11 +79,7 @@ def reorder_transition_matrix(transition_matrix, old_order, new_order):
 
 def z_order_interactions_transition_matrix(tm, states):
     """old version (no memory)"""
-    with open(f"data/anchor_coordinates.pickle", "rb") as f:
-        anchor_coordinates = pickle.load(f)
-        
-    # Sort anchor coordinates by Z
-    anchor_coordinates = dict(sorted(anchor_coordinates.items(), key=lambda x: x[1][2]))
+    anchor_coordinates = get_sorted_anchor_coordinates()
     
     for key in list(anchor_coordinates.keys()):
         if key not in states:
@@ -80,11 +93,7 @@ def z_order_interactions_transition_matrix(tm, states):
     return tm, new_states
 
 def z_order_get_only_state_to_idx_dict():
-    with open(f"data/anchor_coordinates.pickle", "rb") as f:
-        anchor_coordinates = pickle.load(f)
-        
-    # Sort anchor coordinates by Z
-    anchor_coordinates = dict(sorted(anchor_coordinates.items(), key=lambda x: x[1][2]))
+    anchor_coordinates = get_sorted_anchor_coordinates()
     
     states = ["nuc"] + list(anchor_coordinates.keys()) + ["cyt"]
     state_to_idx = {state: idx for idx, state in enumerate(states)}
@@ -94,11 +103,7 @@ def z_order_interactionsmem_transition_matrix(tm, states):
     """new version (memory). ordering is splitting the matrix into 2 parts, memory and non memory.
     each is ordered by z within itself."""
     
-    with open(f"data/anchor_coordinates.pickle", "rb") as f:
-        anchor_coordinates = pickle.load(f)
-        
-    # Sort anchor coordinates by Z
-    anchor_coordinates = dict(sorted(anchor_coordinates.items(), key=lambda x: x[1][2]))
+    anchor_coordinates = get_sorted_anchor_coordinates()
     
     for key in list(anchor_coordinates.keys()):
         if key not in states:

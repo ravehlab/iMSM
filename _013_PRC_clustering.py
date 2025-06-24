@@ -38,6 +38,7 @@ class PcaCluster:
     
     def get_inverse_centers_normalized(self):
         centers = self.get_inverse_centers()
+        centers[centers < 0] = 0  # ensure no negative values
         return centers / centers.sum(axis=1, keepdims=True)
     
     def get_inverse_stationary(self, pi):
