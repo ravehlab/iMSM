@@ -188,7 +188,7 @@ def generate_transition_matrix(data, fg_types, n_chains_per_fg, init_1 = False, 
 ###########################################################################################
 
 
-def categorize_multiples(sim_indexes, sim_times, load_path_prefix="data/singles/", step=1, save_file_path=None, k=1):
+def categorize_multiples(sim_indexes, sim_times, diffuser_coords_path_prefix, fg_coords_path_prefix, step=1, save_file_path=None, k=1):
     i_time_iterator = [(sim_i, time_i, time) for sim_i in sim_indexes for time_i, time in enumerate(sim_times)]
 
 
@@ -197,9 +197,9 @@ def categorize_multiples(sim_indexes, sim_times, load_path_prefix="data/singles/
     def process_file(i_time):
         sim_i, time_i, time = i_time
         print(f"{time}, {sim_i} ", end="")
-        with open(f"{load_path_prefix}/{sim_i}/{time}.pickle", "rb") as f:
+        with open(f"{diffuser_coords_path_prefix}/{sim_i}/{time}.pickle", "rb") as f:
             diffuser_trajectories = pickle.load(f)
-        with open(f"{load_path_prefix}/{sim_i}/{time}-fgs.pickle", "rb") as f:
+        with open(f"{fg_coords_path_prefix}/{sim_i}/{time}-fgs.pickle", "rb") as f:
             fg_trajectories = pickle.load(f)
         categorized = categorize_diffusers_over_time(diffuser_trajectories, fg_trajectories, k=k, step=step)
         arrays[sim_i - 1][time_i] = categorized

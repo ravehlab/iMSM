@@ -165,8 +165,9 @@ def load_embed_save(window_size, load_categorized_path, save_embedded_path, save
     # dump data
     with open(save_embedded_path, "wb") as f:
         pickle.dump(embedded_sections, f)
-    with open(save_embedded_eighth_path, "wb") as f:
-        pickle.dump(embedded_sections[:int(len(embedded_sections)//8)], f)
+    if save_embedded_eighth_path is not None:
+        with open(save_embedded_eighth_path, "wb") as f:
+            pickle.dump(embedded_sections[:int(len(embedded_sections)//8)], f)
         
         
 def load_reduce_cluster_save(pca_components, n_clusters: list[int], load_embedded_path, save_pca_cluster_path, verbose: bool = False, bisecting: bool = False):

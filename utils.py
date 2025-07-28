@@ -142,7 +142,8 @@ def infinitesimal_generator(P, dt=1.0):
     numpy.ndarray
         Infinitesimal generator matrix Q. 
     """
-    return sp.linalg.logm(P) / dt
+    Q = sp.linalg.logm(P) / dt
+    return Q.real
 
 def transition_from_generator(Q, dt=1.0):
     return sp.linalg.expm(Q * dt)
