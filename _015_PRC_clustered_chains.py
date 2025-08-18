@@ -3,15 +3,15 @@
 import numpy as np
 from collections import defaultdict
 
+import deeptime 
+
 def normalize_rows(counts_matrix):
     transition_matrix = np.zeros_like(counts_matrix)
     n_states = counts_matrix.shape[0]
     for i in range(n_states):
         row_sum = np.sum(counts_matrix[i, :])
         if row_sum == 0:
-            print(f"Row sum is 0, setting row {i} to 0    :( ")
-            transition_matrix[i, :] = 0
-            continue
+            print(f"Row sum is 0, this shouldnt be happening !!!!!!!!!!!!!!!!!!!!!   :( ")
         transition_matrix[i, :] = counts_matrix[i, :] / row_sum
     return transition_matrix
 
@@ -27,7 +27,7 @@ def generate_counts_matrix(data):
             counts[current_state][next_state] += 1
     return counts
 
-def generate_transition_matrix(data, n_clusters, init_1 = False, add_to_diag = 0):
+def generate_transition_matrix(data, n_mesostates, prior=1):
     """
     Generate a transition matrix from an array of categorical time series.
     
@@ -48,14 +48,50 @@ def generate_transition_matrix(data, n_clusters, init_1 = False, add_to_diag = 0
     counts = generate_counts_matrix(data)
     
     # Create transition matrix
-    if init_1: transition_matrix = np.ones((n_clusters, n_clusters)) * 0.001
-    else: transition_matrix = np.zeros((n_clusters, n_clusters))
-    transition_matrix += add_to_diag * np.eye(n_clusters)
-    
-    # Fill transition matrix with probabilities
-    for i in range(n_clusters):
-        for j in range(n_clusters):
+    transition_matrix = np.zeros((n_mesostates, n_mesostates))
+
+    # Fill transition matrix with counts
+    for i in range(n_mesostates):
+        for j in range(n_mesostates):
             transition_matrix[i, j] += counts[i][j]
+            
+    # Fix sum 0 rows
+    # for i in range(n_mesostates):
+    #     row_sum = np.sum(transition_matrix[i, :])
+    #     if row_sum < 10:
+    #         print(f"Row sum is less than 10, setting row {i} to sum of adjacent rows:( ")
+    #         prev_shifted = np.concatenate([[0], transition_matrix[i-1, :-1]])  # Shift right, pad left with 0
+    #         next_shifted = np.concatenate([transition_matrix[i+1, 1:], [0]])   # Shift left, pad right with 0
+    #         transition_matrix[i, :] += (prev_shifted + next_shifted) / 2
+    #         continue
+            
+    # Add prior        
+    # transition_matrix += np.eye(n_mesostates) * prior
+    transition_matrix += (np.diag(np.full(transition_matrix.shape[0]-1, prior), k=1) * 0.05)
+    transition_matrix += (np.diag(np.full(transition_matrix.shape[0]-1, prior), k=-1) * 0.05)
+    
+    # smooth the matrix with a 3x3 moving average on interior (leaves border rows/cols unchanged)
+    kern = np.ones((3, 3)) / 9.0
+    sub = transition_matrix[1:-1, 1:-1]
+    padded = np.pad(sub, 1, mode='edge')
+    smoothed = np.zeros_like(sub)
+    for i in range(sub.shape[0]):
+        for j in range(sub.shape[1]):
+            smoothed[i, j] = np.sum(padded[i:i+3, j:j+3] * kern)
+    transition_matrix[1:-1, 1:-1] = smoothed
+
     transition_matrix = normalize_rows(transition_matrix)
     
     return transition_matrix
+
+def generate_bmsm(data, n_mesostates, prior=1, lagtime=1, reversible=False):
+    # using effective count mode, recommended for bayesian MSMs here:
+    # https://deeptime-ml.github.io/latest/api/generated/deeptime.markov.TransitionCountEstimator.html
+    counts = deeptime.markov.TransitionCountEstimator(lagtime=lagtime, count_mode="effective", n_states=n_mesostates).fit(data).fetch_model().count_matrix
+    # Add pseudo counts to the diagonal and superdiagonals
+    pseudo_counts = prior * np.eye(n_mesostates)
+    pseudo_counts += (np.diag(np.full(pseudo_counts.shape[0]-1, prior), k=1) * 0.00001)
+    pseudo_counts += (np.diag(np.full(pseudo_counts.shape[0]-1, prior), k=-1) * 0.00001)
+    counts += pseudo_counts
+    mm = deeptime.markov.msm.BayesianMSM(reversible=reversible).fit(counts).fetch_model()
+    return mm

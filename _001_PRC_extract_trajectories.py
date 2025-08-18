@@ -140,7 +140,8 @@ def multi_load_kap_data(input_rmf_path, kap_radius, kap_amount, start_t, end_t, 
         # Map the processing function to all good simulations
         results = pool.map(load_kap_data_partial, good_sims)
         
-    return np.concatenate(results, axis=0)
+    # return np.concatenate(results, axis=0)
+    return results
 
 
 ###########################

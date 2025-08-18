@@ -7,7 +7,10 @@ import re
 import uuid
 import importlib.util
 import pydtmc
+import pyemma.msm as msm
 
+
+AVOGADRO = 6.02214076e23  # mol^-1
 
 # def import_reload(file_path, function_name):
 #     # Generate a random module name to avoid conflicts
@@ -184,3 +187,52 @@ def mean_first_passage_time(P, states, start_states, target_states):
 def stationary_distribution(P):
     mc = pydtmc.MarkovChain(P)
     return np.array(mc.pi[0])
+
+# def markov_rate_with_flux(P, start_states, target_states):
+#     # Based on Transition path theory. 
+#     # See http://docs.markovmodel.org/lecture_tpt.html
+#     mc = pydtmc.MarkovChain(P)
+#     n_states = len(mc.states)
+#     start_states_set = set(start_states)
+#     anti_start_states = [i for i in range(n_states) if i not in start_states_set]
+    
+#     committor_forward = mc.committor_probabilities("forward" ,start_states, target_states)
+#     committor_backward = mc.committor_probabilities("backward" ,start_states, target_states)
+#     stationary = mc.pi[0]
+    
+#     # Vectorized:
+#     # for i in start_states:
+#     #     for j in anti_start_states:
+#     #         flux += stationary[i] * committor_forward[j] * P[i, j]
+#     flux = (
+#         stationary[start_states][:, None]       # shape (|A|,1)
+#       * P[np.ix_(start_states, anti_start_states)]  # shape (|A|,|nonA|)
+#       * committor_forward[anti_start_states]            # broadcast to (|A|,|nonA|)
+#     ).sum()
+
+#     denom = (stationary * committor_backward).sum()
+        
+#     return flux / denom
+
+def markov_rate_with_flux(P, start_states, target_states):
+    mc = msm.markov_model(P)
+    tpt = msm.tpt(mc, start_states, target_states)
+    return tpt.rate
+
+
+def concentration_to_amount(molar: float, box_side_a: float):
+    volume = np.power(box_side_a, 3)
+    return (molar * AVOGADRO * volume) / 1e+27
+
+def amount_to_concentration(amount: float, box_side_a: float):
+    # Units: Molar
+    volume = np.power(box_side_a, 3)
+    return amount / (AVOGADRO * volume * 1e-27)
+
+def radius_a_to_kda(radius_a):
+    """
+    Like supplementary of raveh et al 2025.
+    Based on  82. H. P. Erickson, Size and shape of protein molecules at the nanometer level determined by sedimentation, gel filtration, and electron microscopy. Biol. Proced. Online 11, 32–51 (2009).
+    """
+    return (radius_a / 6.6)**3
+

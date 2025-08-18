@@ -6,7 +6,7 @@ import concurrent.futures
 import os
 
 
-def categorize_diffusers(diffuser_coordinates, fg_coordinates, k, max_distance=5):
+def categorize_diffusers(diffuser_coordinates, fg_coordinates, k, diffuser_radius_nm=3.5, max_surface_distance_nm=0.7):
     """"Returns arrays containing the types and chain indices of the k closest FGs for each diffuser.
 
     Args:
@@ -18,6 +18,7 @@ def categorize_diffusers(diffuser_coordinates, fg_coordinates, k, max_distance=5
         np.array: Array of shape [n_diffusers, k] containing strings in format "<fg_type>_<chain_i>"
         or "cyt"/"nuc" if no FG is within max_distance.
     """
+    FG_BEAD_RADIUS_NM=0.8
     n_diffusers = diffuser_coordinates.shape[0]
     # Initialize results array
     result = np.full((n_diffusers, k), "cyt", dtype='U20')
@@ -54,7 +55,7 @@ def categorize_diffusers(diffuser_coordinates, fg_coordinates, k, max_distance=5
     # Process each diffuser using vectorized operations
     for i in range(n_diffusers):
         # Find valid distances within max_distance
-        valid_mask = all_min_distances[i] <= max_distance
+        valid_mask = all_min_distances[i] <= diffuser_radius_nm + max_surface_distance_nm + FG_BEAD_RADIUS_NM
         
         if np.any(valid_mask):
             # Get valid distances and their indices
@@ -68,7 +69,7 @@ def categorize_diffusers(diffuser_coordinates, fg_coordinates, k, max_distance=5
     return result
 
 
-def categorize_diffusers_over_time(diffuser_trajectories, fg_trajectories, k, step=1):
+def categorize_diffusers_over_time(diffuser_trajectories, fg_trajectories, k, step=1, diffuser_radius_nm=3.5):
     """
     returns array of shape [n_diffusers, k(closest), time]
     """
@@ -82,7 +83,7 @@ def categorize_diffusers_over_time(diffuser_trajectories, fg_trajectories, k, st
     for t in range(0, n_t, step):
         cur_diffuser_trajectories = diffuser_trajectories[:, :, t]
         cur_fg_trajectories = {fg_type : fg_trajectories[:, :, :, t] for (fg_type, fg_trajectories) in fg_trajectories.items()}
-        categorized_trajectories[:,:,int(t / step)] = categorize_diffusers(cur_diffuser_trajectories, cur_fg_trajectories, k)
+        categorized_trajectories[:,:,int(t / step)] = categorize_diffusers(cur_diffuser_trajectories, cur_fg_trajectories, k, diffuser_radius_nm=diffuser_radius_nm)
     return categorized_trajectories
 
 def normalize_rows(counts_matrix):
@@ -188,25 +189,28 @@ def generate_transition_matrix(data, fg_types, n_chains_per_fg, init_1 = False, 
 ###########################################################################################
 
 
-def categorize_multiples(sim_indexes, sim_times, diffuser_coords_path_prefix, fg_coords_path_prefix, step=1, save_file_path=None, k=1):
+def categorize_multiples(sim_indexes, sim_times, diffuser_coords_path_prefix, fg_coords_path_prefix, step=1, save_file_path=None, k=1, diffuser_radius_nm=3.5):
     i_time_iterator = [(sim_i, time_i, time) for sim_i in sim_indexes for time_i, time in enumerate(sim_times)]
 
 
     arrays = [["temp" for _ in range(len(sim_times))] for _ in range(len(sim_indexes))]    
 
-    def process_file(i_time):
+    def process_file_worker(i_time):
         sim_i, time_i, time = i_time
         print(f"{time}, {sim_i} ", end="")
+        # print(f"path = {diffuser_coords_path_prefix}/{sim_i}/{time}.pickle")
+        # print(f"fg path = {fg_coords_path_prefix}/{sim_i}/{time}-fgs.pickle")
         with open(f"{diffuser_coords_path_prefix}/{sim_i}/{time}.pickle", "rb") as f:
             diffuser_trajectories = pickle.load(f)
         with open(f"{fg_coords_path_prefix}/{sim_i}/{time}-fgs.pickle", "rb") as f:
             fg_trajectories = pickle.load(f)
-        categorized = categorize_diffusers_over_time(diffuser_trajectories, fg_trajectories, k=k, step=step)
+        categorized = categorize_diffusers_over_time(diffuser_trajectories, fg_trajectories, k=k, step=step, diffuser_radius_nm=diffuser_radius_nm)
         arrays[sim_i - 1][time_i] = categorized
 
     num_processes = len(os.sched_getaffinity(0))
+    print(f"Using {num_processes} cores")
     with concurrent.futures.ThreadPoolExecutor(max_workers=num_processes) as executor:
-        executor.map(process_file, i_time_iterator)
+        executor.map(process_file_worker, i_time_iterator)
 
     for i in range(len(arrays)):
         arrays[i] = np.concatenate(arrays[i], axis=2)
