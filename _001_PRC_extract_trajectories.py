@@ -73,6 +73,7 @@ def load_kap_data(input_rmf_path, kap_radius, kap_amount, start_t, end_t, step_t
     for rmf_t in range(start_t, end_t, step_t):
         in_fh = RMF.open_rmf_file_read_only(f"{input_rmf_path}/{rmf_t}.movie.rmf")
         rff = RMF.ReferenceFrameFactory(in_fh)
+        bf = RMF.BallFactory(in_fh)
         tf = RMF.TypedFactory(in_fh)
         kap_string = f"kap{kap_radius}"
         kap_types = [kap_string]
@@ -88,12 +89,20 @@ def load_kap_data(input_rmf_path, kap_radius, kap_amount, start_t, end_t, step_t
     
             traj_i = int(f_id + ((rmf_t - start_t) / step_t) * frames_per_file)
             # read data
+            print("hi")
             for kap_i in range(kap_amount):
                 coord = rff.get(type2chains[kap_string][0][kap_i]).get_translation()
                 
                 trajectories[kap_i, 0, traj_i] = coord[0] / 10
                 trajectories[kap_i, 1, traj_i] = coord[1] / 10
                 trajectories[kap_i, 2, traj_i] = coord[2] / 10
+                
+                # sites:::::
+                # note: site radius is 6A
+                # sites = type2chains[kap_string][0][kap_i].get_children()
+                # for site_i in range(n_sites):
+                #     coord = bf.get(sites[site_i]).get_coordinates() + kap_coords
+
             if one_frame_from_each:
                 break
     return trajectories
@@ -111,9 +120,43 @@ def _load_kap_data_worker(i, input_rmf_path, kap_radius, kap_amount, start_t, en
         one_frame_from_each=one_frame_from_each)
     return trajectories
 
-def multi_load_kap_data(input_rmf_path, kap_radius, kap_amount, start_t, end_t, step_t, sims_range, frames_per_file=104, one_frame_from_each=False):
+# def multi_load_kap_data(input_rmf_path, kap_radius, kap_amount, start_t, end_t, step_t, sims_range, frames_per_file=104, one_frame_from_each=False):
 
             
+#     load_kap_data_partial = partial(
+#         _load_kap_data_worker,
+#         input_rmf_path=input_rmf_path,
+#         kap_radius=kap_radius,
+#         kap_amount=kap_amount,
+#         start_t=start_t,
+#         end_t=end_t,
+#         step_t=step_t,
+#         frames_per_file=frames_per_file,
+#         one_frame_from_each=one_frame_from_each
+#     )
+    
+#     good_sims = []
+#     for i in sims_range:
+#         # check that trajectory reached end_t time
+#         if os.path.isfile(f"{input_rmf_path}/{i}/{end_t}.movie.rmf"):        
+#             good_sims.append(i)
+#         else:
+#             print(f"sim {i} not long enough")
+    
+#     num_cores = len(os.sched_getaffinity(0))
+#     print(f"Using {num_cores} cores")
+#     with mp.Pool(processes=num_cores) as pool:
+#         # Map the processing function to all good simulations
+#         results = pool.map(load_kap_data_partial, good_sims)
+        
+#     # return np.concatenate(results, axis=0)
+#     return results
+
+
+def multi_load_kap_data(input_rmf_path, kap_radius, kap_amount, start_t, end_t, step_t, sims_range, frames_per_file=104, one_frame_from_each=False):
+    from functools import partial
+    import os
+
     load_kap_data_partial = partial(
         _load_kap_data_worker,
         input_rmf_path=input_rmf_path,
@@ -125,24 +168,27 @@ def multi_load_kap_data(input_rmf_path, kap_radius, kap_amount, start_t, end_t, 
         frames_per_file=frames_per_file,
         one_frame_from_each=one_frame_from_each
     )
-    
+
     good_sims = []
     for i in sims_range:
         # check that trajectory reached end_t time
-        if os.path.isfile(f"{input_rmf_path}/{i}/{end_t}.movie.rmf"):        
+        if os.path.isfile(f"{input_rmf_path}/{i}/{end_t}.movie.rmf"):
             good_sims.append(i)
         else:
             print(f"sim {i} not long enough")
-    
-    num_cores = len(os.sched_getaffinity(0))
-    print(f"Using {num_cores} cores")
-    with mp.Pool(processes=num_cores) as pool:
-        # Map the processing function to all good simulations
-        results = pool.map(load_kap_data_partial, good_sims)
-        
+
+    print("Running without multiprocessing (debug mode)")
+    results = []
+    for i in good_sims:
+        try:
+            res = load_kap_data_partial(i)
+        except Exception as e:
+            print(f"Error processing sim {i}: {e}")
+            raise
+        results.append(res)
+
     # return np.concatenate(results, axis=0)
     return results
-
 
 ###########################
 #          FGS            #

@@ -65,20 +65,28 @@ def generate_transition_matrix(data, n_mesostates, prior=1):
     #         transition_matrix[i, :] += (prev_shifted + next_shifted) / 2
     #         continue
             
-    # Add prior        
+    # Add prior
+    # half_meso = n_mesostates // 2
+    # mask = np.tril(np.ones((half_meso, half_meso)), k=0).astype(bool)
+    # transition_matrix[:half_meso, :half_meso][mask] += prior
+    # mask = np.triu(np.ones((half_meso, half_meso)), k=0).astype(bool)
+    # transition_matrix[half_meso:, half_meso:][mask] += prior
+    transition_matrix += prior
+    # transition_matrix[0,0] += 100000
+    # transition_matrix[-1,-1] += 100000
     # transition_matrix += np.eye(n_mesostates) * prior
-    transition_matrix += (np.diag(np.full(transition_matrix.shape[0]-1, prior), k=1) * 0.05)
-    transition_matrix += (np.diag(np.full(transition_matrix.shape[0]-1, prior), k=-1) * 0.05)
+    # transition_matrix += (np.diag(np.full(transition_matrix.shape[0]-1, prior * 0.5), k=1))
+    # transition_matrix += (np.diag(np.full(transition_matrix.shape[0]-1, prior * 0.5), k=-1))
     
     # smooth the matrix with a 3x3 moving average on interior (leaves border rows/cols unchanged)
-    kern = np.ones((3, 3)) / 9.0
-    sub = transition_matrix[1:-1, 1:-1]
-    padded = np.pad(sub, 1, mode='edge')
-    smoothed = np.zeros_like(sub)
-    for i in range(sub.shape[0]):
-        for j in range(sub.shape[1]):
-            smoothed[i, j] = np.sum(padded[i:i+3, j:j+3] * kern)
-    transition_matrix[1:-1, 1:-1] = smoothed
+    # kern = np.ones((3, 3)) / 9.0
+    # sub = transition_matrix[1:-1, 1:-1]
+    # padded = np.pad(sub, 1, mode='edge')
+    # smoothed = np.zeros_like(sub)
+    # for i in range(sub.shape[0]):
+    #     for j in range(sub.shape[1]):
+    #         smoothed[i, j] = np.sum(padded[i:i+3, j:j+3] * kern)
+    # transition_matrix[1:-1, 1:-1] = smoothed
 
     transition_matrix = normalize_rows(transition_matrix)
     

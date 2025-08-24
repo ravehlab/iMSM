@@ -7,7 +7,8 @@ import re
 import uuid
 import importlib.util
 import pydtmc
-import pyemma.msm as msm
+# import pyemma.msm as msm
+import deeptime
 
 
 AVOGADRO = 6.02214076e23  # mol^-1
@@ -214,10 +215,21 @@ def stationary_distribution(P):
         
 #     return flux / denom
 
+def manual_rate(P, start_states, target_states):
+    mc = deeptime.markov.msm.MarkovStateModel(P)
+    times = []
+    for i in range(10000):
+        start = np.random.choice(start_states)
+        traj = mc.simulate(n_steps = 99999999, start = start, stop = target_states)
+        times.append(len(traj))
+    mfpt = np.mean(times)
+    return 1 / mfpt
+
 def markov_rate_with_flux(P, start_states, target_states):
-    mc = msm.markov_model(P)
-    tpt = msm.tpt(mc, start_states, target_states)
-    return tpt.rate
+    mc = deeptime.markov.msm.MarkovStateModel(P)
+    mfpt = mc.mfpt(start_states, target_states)
+    rate = 1 / mfpt
+    return rate
 
 
 def concentration_to_amount(molar: float, box_side_a: float):
