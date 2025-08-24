@@ -75,39 +75,6 @@ def _add_nodes(node: Any, tf: Any, type_prefixes: Sequence[str], depth: int = 0)
         ret += _add_nodes(c, tf, type_prefixes, depth + 1)
     return ret
 
-
-def _add_nodes_exact(node: Any, tf: Any, types: Sequence[str], depth: int = 0) -> List[List[Any]]:
-    """Collect node lists whose first child matches any given type exactly.
-
-    Parameters
-    ----------
-    node : Any
-        RMF node to scan.
-    tf : Any
-        RMF.TypedFactory instance.
-    types : Sequence[str]
-        Full types to match exactly (e.g., ["Nup1N"]).
-    depth : int, optional
-        Traversal depth used internally for recursion.
-
-    Returns
-    -------
-    list[list[Any]]
-        A list of child-node lists, each corresponding to a matching chain.
-    """
-    children = node.get_children()
-    ret: List[List[Any]] = []
-    if len(children) == 0:
-        return ret
-    if _has_depth_with_site(node, 3) and tf.get_is(children[0]):
-        child_type = tf.get(children[0]).get_type_name()
-        if any(child_type == tp for tp in types):
-            ret.append(children)
-    for c in children:
-        ret += _add_nodes_exact(c, tf, types, depth + 1)
-    return ret
-
-
 ###########################
 #          KAPS           #
 ###########################
