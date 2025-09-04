@@ -2,36 +2,12 @@ import numpy as np
 import scipy as sp
 import pickle
 import os
-import sys
 import re
-import uuid
-import importlib.util
 import pydtmc
-# import pyemma.msm as msm
 import deeptime
 
 
 AVOGADRO = 6.02214076e23  # mol^-1
-
-# def import_reload(file_path, function_name):
-#     # Generate a random module name to avoid conflicts
-#     module_name = f"temp_module_{uuid.uuid4().hex[:8]}"
-#     # Set up the spec
-#     spec = importlib.util.spec_from_file_location(module_name, file_path)
-#     if spec is None:
-#         raise FileNotFoundError(f"Could not find file: {file_path}")
-#     # Create the module
-#     module = importlib.util.module_from_spec(spec)
-#     # Add the module to sys.modules
-#     sys.modules[module_name] = module
-#     # Execute the module
-#     spec.loader.exec_module(module)
-#     # Get the specific function
-#     try:
-#         function = getattr(module, function_name)
-#         return function
-#     except AttributeError:
-#         raise AttributeError(f"Function '{function_name}' not found in {file_path}")
 
 def get_sorted_anchor_coordinates():
     with open(f"data/anchor_coordinates.pickle", "rb") as f:
@@ -215,22 +191,21 @@ def stationary_distribution(P):
         
 #     return flux / denom
 
-def manual_rate(P, start_states, target_states):
+def markov_rate_manual(P, start_states, target_states, n_samples=10000, n_steps=100000000):
     mc = deeptime.markov.msm.MarkovStateModel(P)
     times = []
-    for i in range(10000):
+    for i in range(n_samples):
         start = np.random.choice(start_states)
-        traj = mc.simulate(n_steps = 99999999, start = start, stop = target_states)
+        traj = mc.simulate(n_steps = n_steps, start = start, stop = target_states)
         times.append(len(traj))
     mfpt = np.mean(times)
     return 1 / mfpt
 
-def markov_rate_with_flux(P, start_states, target_states):
+def markov_rate_flux(P, start_states, target_states):
     mc = deeptime.markov.msm.MarkovStateModel(P)
     mfpt = mc.mfpt(start_states, target_states)
     rate = 1 / mfpt
     return rate
-
 
 def concentration_to_amount(molar: float, box_side_a: float):
     volume = np.power(box_side_a, 3)
