@@ -132,6 +132,7 @@ def load_kap_data(
         kap_types = [kap_string]
 
         # Load RMF chains indexed by type
+        # Note: currently only one KAP type at a time is supported
         type2chains: Dict[str, List[List[Any]]] = {}
         for kap_type in kap_types:
             type2chains[kap_type] = _add_nodes(in_fh.get_root_node(), tf, [kap_type])
