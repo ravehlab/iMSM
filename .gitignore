@@ -1,6 +1,7 @@
 *.pickle
 *.out
 *.png
+*.gif
 *.svg
 *.html
 *.pyc

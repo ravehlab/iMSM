@@ -1,9 +1,11 @@
-from typing import Union, Type
-from pandas.core import algorithms
+from xml.parsers.expat import model
+from networkx import clustering
+import scipy as sp
 from sklearn.base import ClusterMixin
+from deeptime.decomposition import TICA, VAMP
 import sklearn.cluster
 from sklearn.decomposition import PCA
-from utils import z_order_get_only_state_to_idx_dict
+from utils import z_order_get_only_state_to_idx_dict, z_order_get_only_state_to_idx_dict_nc
 from utils_custom_kmeans import CustomKMeans
 from banditpam import KMedoids
 import numpy as np
@@ -106,23 +108,52 @@ class ClusterAgglomerative:
     
 class ClusterFaiss:
     def __init__(self):
-        """for now only supports kmeans and bisecting kmeans"""
         self.centers = None
         self.y = None
 
-    def fit(self, clustering, X):
+    def fit(self, n_clusters, X):
         X = np.sqrt(X) # hellinger distance
-        clustering.train(X)
+        clustering = faiss.Kmeans(d=X.shape[1], k=n_clusters, spherical=True, verbose=False, gpu=True)
+        clustering.train(X)        
 
-        self.centers = np.power(clustering.centroids, 2)
+        self.centers = np.power(clustering.centroids, 2) # to get a distribution that sums to 1
+        # self.centers = clustering.centroids
         _, y = clustering.assign(X)
         # sort the centers by z in inverse tranformation
         sorted_indices = sort_cluster_centers(self.centers)
         index_to_new_index = {old_index: new_index for new_index, old_index in enumerate(sorted_indices)}
         y = np.array([index_to_new_index[i] for i in y])
         self.centers = self.centers[sorted_indices]
-        self.y = y
         
+        # Check for near-duplicate centers and remove them
+        unique_centers = []
+        unique_indices = []
+        center_mapping = {}  # maps old index to new index
+
+        for i, center in enumerate(self.centers):
+            is_duplicate = False
+            for j, unique_center in enumerate(unique_centers):
+                # Calculate L2 distance between centers
+                distance = np.linalg.norm(center - unique_center)
+                if distance < 0.05:
+                    is_duplicate = True
+                    center_mapping[i] = j
+                    break
+            
+            if not is_duplicate:
+                unique_centers.append(center)
+                unique_indices.append(i)
+                center_mapping[i] = len(unique_centers) - 1
+
+        # Update centers and labels
+        self.centers = np.array(unique_centers)
+        n_unique_clusters = len(unique_centers)
+
+        # Update y labels to map to new cluster indices
+        self.y = np.array([center_mapping[label] for label in y])
+
+        print(f"Reduced from {n_clusters} to {n_unique_clusters} clusters after removing duplicates")
+            
         return self
     
     def predict(self, X):
@@ -143,10 +174,130 @@ class ClusterFaiss:
             pi = pi[:, np.newaxis]
         centers = self.get_inverse_centers_normalized()
         return (pi * centers).sum(axis=0)  # shape [n_states]
-        
     
+    
+class TICAFaiss:
+    def __init__(self):
+        self.centers = None
+        self.inverse_centers = None
+        self.y = None
+
+    def fit(self, n_clusters, X, X_timeseries):
+        X_timeseries = [X_timeseries[i].T for i in range(X_timeseries.shape[0])]
+        tica = TICA(lagtime=1, var_cutoff=0.95)
+        tica.fit_from_timeseries(X_timeseries)
+        transformed_X = tica.transform(X)
+        # print("Transformed X shape:", transformed_X.shape)
+        dim = transformed_X.shape[1]
+        print(f"TICA dim: {dim}")
+        clustering = faiss.Kmeans(d=transformed_X.shape[1], k=n_clusters, verbose=False, gpu=True)
+        clustering.train(transformed_X)
+        self.centers = clustering.centroids # shape [n_clusters, n_features] in tica space
+        _, self.y = clustering.assign(transformed_X) # shape [n_samples,]
+
+        # Calc inverse transform
+        model = tica.fetch_model()
+        U = model.instantaneous_coefficients[:,:dim]
+        U_pinv = np.linalg.pinv(U.T)  # Pseudoinverse of U⊤
+        # Approximate inverse transform (back to feature space)
+        # Note: This assumes identity basis functions (χ₀(x) = x)
+        self.inverse_centers = (U_pinv @ self.centers.T).T + model.mean_0
+        # normalize the centers to be a distribution
+        self.inverse_centers[self.inverse_centers < 0] = 0
+        self.inverse_centers = self.inverse_centers / self.inverse_centers.sum(axis=1, keepdims=True)
         
-def generate_radially_shifted(categorized_trajectories, shift):
+        # sort the centers by z in inverse tranformation
+        sorted_indices = sort_cluster_centers(self.inverse_centers)
+        index_to_new_index = {old_index: new_index for new_index, old_index in enumerate(sorted_indices)}
+        self.y = np.array([index_to_new_index[i] for i in self.y])
+        self.centers = self.centers[sorted_indices]
+        self.inverse_centers = self.inverse_centers[sorted_indices]
+        
+        return self
+    
+    def predict(self, X):
+        # transformed_X = self.tica.transform(X)
+        
+        return self.y
+
+    def get_inverse_centers(self):
+        return self.inverse_centers
+    
+    def get_inverse_centers_normalized(self):
+        centers = self.centers
+        centers[centers < 0] = 0  # ensure no negative values
+        return centers / centers.sum(axis=1, keepdims=True)
+    
+    def get_inverse_stationary(self, pi):
+        """given stationary in the cluster space, return the stationary in the original space"""
+        pi = np.array(pi)
+        if len(pi.shape) == 1:
+            pi = pi[:, np.newaxis]
+        centers = self.get_inverse_centers_normalized()
+        return (pi * centers).sum(axis=0)  # shape [n_states]
+        
+class TICAhdbscan:
+    def __init__(self):
+        self.centers = None
+        self.inverse_centers = None
+        self.y = None
+        self.dim=None
+
+    def fit(self, X, X_timeseries):
+        X_timeseries = [X_timeseries[i].T for i in range(X_timeseries.shape[0])]
+        tica = TICA(lagtime=1, var_cutoff=0.40)
+        tica.fit_from_timeseries(X_timeseries)
+        transformed_X = tica.transform(X)
+        # print("Transformed X shape:", transformed_X.shape)
+        self.dim = transformed_X.shape[1]
+        print(f"TICA dim: {self.dim}")
+        n_jobs = len(os.sched_getaffinity(0))
+        clustering = sklearn.cluster.HDBSCAN(min_cluster_size=10, min_samples=160, n_jobs=None, leaf_size=80, cluster_selection_method='leaf', store_centers="centroid")
+        clustering.fit(transformed_X)
+        self.centers = clustering.centroids_ # shape [n_clusters, n_features] in tica space
+        _, self.y = clustering.assign(transformed_X) # shape [n_samples,]
+        
+        # Calc inverse transform
+        model = tica.fetch_model()
+        U = model.instantaneous_coefficients[:,:self.dim]
+        U_pinv = np.linalg.pinv(U.T)  # Pseudoinverse of U⊤
+        # Approximate inverse transform (back to feature space)
+        # Note: This assumes identity basis functions (χ₀(x) = x)
+        self.inverse_centers = (U_pinv @ self.centers.T).T + model.mean_0
+        # normalize the centers to be a distribution
+        self.inverse_centers[self.inverse_centers < 0] = 0
+        self.inverse_centers = self.inverse_centers / self.inverse_centers.sum(axis=1, keepdims=True)
+        
+        # sort the centers by z in inverse tranformation
+        sorted_indices = sort_cluster_centers(self.inverse_centers)
+        index_to_new_index = {old_index: new_index for new_index, old_index in enumerate(sorted_indices)}
+        self.y = np.array([index_to_new_index[i] for i in self.y])
+        self.centers = self.centers[sorted_indices]
+        self.inverse_centers = self.inverse_centers[sorted_indices]
+        
+        return self
+    
+    def predict(self, X):
+        return self.y
+
+    def get_inverse_centers(self):
+        return self.inverse_centers
+    
+    def get_inverse_centers_normalized(self):
+        centers = self.centers
+        centers[centers < 0] = 0  # ensure no negative values
+        return centers / centers.sum(axis=1, keepdims=True)
+    
+    def get_inverse_stationary(self, pi):
+        """given stationary in the cluster space, return the stationary in the original space"""
+        pi = np.array(pi)
+        if len(pi.shape) == 1:
+            pi = pi[:, np.newaxis]
+        centers = self.get_inverse_centers_normalized()
+        return (pi * centers).sum(axis=0)  # shape [n_states]
+
+        
+def generate_radially_shifted(categorized_trajectories, shift, split_nc=False):
     """
     categorized_trajectories: shape [n_diffusers, k(closest), time]
     """
@@ -157,18 +308,27 @@ def generate_radially_shifted(categorized_trajectories, shift):
             for time_i in range(n_time):
                 # shift the trajectory radially
                 state = categorized_trajectories[diffuser_i, closest_i, time_i]
-                if state == "cyt":
-                    shifted_trajectories[diffuser_i, closest_i, time_i] = "cyt"
-                    continue
-                if state == "nuc":
-                    shifted_trajectories[diffuser_i, closest_i, time_i] = "nuc"
+                if state in ["cyt", "nuc"]:
+                    shifted_trajectories[diffuser_i, closest_i, time_i] = state
                     continue
                 split_state = state.split("_")
+                if split_state[1] == "channel":
+                    channel_i = int(split_state[2])
+                    shifted_trajectories[diffuser_i, closest_i, time_i] = f"{split_state[0]}_channel_{int((channel_i + shift) % 8)}"
+                    continue
+                
                 fg = split_state[0]
-                fg_i = int(split_state[1])
+                if split_nc:
+                    fg_nc = split_state[1]
+                    fg_i = int(split_state[2])
+                else:
+                    fg_i = int(split_state[1])
                 fg_ring_i = fg_i // 8
                 fg_within_ring_i = fg_i % 8
-                shifted_trajectories[diffuser_i, closest_i, time_i] = f"{fg}_{(fg_ring_i * 8 + ((fg_within_ring_i + shift) % 8)):02d}"
+                if split_nc:
+                    shifted_trajectories[diffuser_i, closest_i, time_i] = f"{fg}_{fg_nc}_{(fg_ring_i * 8 + ((fg_within_ring_i + shift) % 8)):02d}"
+                else:
+                    shifted_trajectories[diffuser_i, closest_i, time_i] = f"{fg}_{(fg_ring_i * 8 + ((fg_within_ring_i + shift) % 8)):02d}"
     return shifted_trajectories
 
 def multi_undivide_from_sections(embedded_sections, n_diffusers):
@@ -202,14 +362,17 @@ def multi_divide_to_sections(categorized_trajectories, window_size):
         divided_trajectories[i] = divide_to_sections(categorized_trajectories[i], window_size)
     return divided_trajectories
     
-def embed_section(section, state_to_idx_dict):
+def embed_section(section, state_to_idx_dict, split_nc=False):
     """
-    return: shape [total_nups + 2(=218)]
+    return: shape [total_nups + 4(=220) OR total_nups * 2 + 18(=450),]
     """
     indexed_section = np.zeros_like(section, dtype=int)
     for i, state in enumerate(section):
         indexed_section[i] = state_to_idx_dict[state]
-    return np.bincount(indexed_section, minlength=218) / len(indexed_section)
+    if split_nc:
+        return np.bincount(indexed_section, minlength=450) / len(indexed_section)
+    else:
+        return np.bincount(indexed_section, minlength=220) / len(indexed_section)
 
 def _histogram_mean(histogram):
         total_sum = 0
@@ -227,14 +390,14 @@ def sort_cluster_centers(centers):
     # sorted_centers = centers[sorted_indices]
     return sorted_indices
 
-def load_embed_save(window_size, load_categorized_path, save_embedded_path, save_embedded_eighth_path):
+def load_embed_save(window_size, load_categorized_path, save_embedded_path, save_embedded_eighth_path, split_nc=False):
     with open(load_categorized_path, "rb") as f:
         categorized_trajectories = pickle.load(f)
 
     # Generate 8 shifted versions of categorized_trajectories    
     shifted_versions = [categorized_trajectories]
     for i in range(1, 8):
-        shifted_versions.append(generate_radially_shifted(categorized_trajectories, i))
+        shifted_versions.append(generate_radially_shifted(categorized_trajectories, i, split_nc=split_nc))
         
     ##########
     # Divide the trajectories into sections
@@ -249,14 +412,17 @@ def load_embed_save(window_size, load_categorized_path, save_embedded_path, save
     ##########
     # Embed Sections
     ##########
-
-    state_to_idx_dict = z_order_get_only_state_to_idx_dict()
-    embedded_sections = np.zeros((all_shifted_versions.shape[0], 218, all_shifted_versions.shape[2])) # (n_diffusers * 8, 218, n_sections)
+    if split_nc:
+        state_to_idx_dict = z_order_get_only_state_to_idx_dict_nc()
+    else:
+        state_to_idx_dict = z_order_get_only_state_to_idx_dict()
+    embedded_sections = np.zeros((all_shifted_versions.shape[0], len(state_to_idx_dict), all_shifted_versions.shape[2])) # (n_diffusers * 8, 220, n_sections)
     for i_diffuser in range(all_shifted_versions.shape[0]):
         for i_section in range(all_shifted_versions.shape[2]):
             # embed the section
             section = all_shifted_versions[i_diffuser, :, i_section]
-            embedded_sections[i_diffuser, :, i_section] = embed_section(section, state_to_idx_dict)
+            section = embed_section(section, state_to_idx_dict, split_nc=split_nc)
+            embedded_sections[i_diffuser, :, i_section] = section
             
     # dump data
     with open(save_embedded_path, "wb") as f:
@@ -296,10 +462,26 @@ def wasserstein_distance_func(x, y):
             
 #     return np.array(unique_sections)
 
-def load_reduce_cluster_save(pca_components, n_clusters: list[int], load_embedded_path, save_pca_cluster_path, save_clustered_path = None, verbose: bool = False, method="kmeans"):
+def load_reduce_cluster_save(pca_components, n_clusters: list[int], load_embedded_path, save_pca_cluster_path, save_clustered_path = None, verbose: bool = False, method="kmeans", filter_common=False):
     # reshape to [n_diffusers * 8 * n_sections, 218]
     with open(load_embedded_path, "rb") as f:
         embedded_sections = pickle.load(f) # (n_diffusers * 8, 218, n_sections)
+        
+    
+    if filter_common:
+        n_trajs = embedded_sections.shape[0]
+        traj_len = embedded_sections.shape[2]
+        filtered_sections = []
+        for i in range(n_trajs):
+            # remove the sections in which over 50% of the mass is in cyt or nuc
+            traj = embedded_sections[i]
+            nuc_mask = traj[0] > 0.9
+            cyt_mask = traj[-1] > 0.9
+            if (np.sum(nuc_mask) > (0.9 * traj_len) or np.sum(cyt_mask) > (0.9 * traj_len)) and i%10 != 0:
+                continue
+            filtered_sections.append(traj)
+        print(f"{len(filtered_sections)} / {n_trajs} trajectories remain after filtering common sections")
+        embedded_sections = np.array(filtered_sections)
         
     reshaped_embedded = np.zeros((embedded_sections.shape[0] * embedded_sections.shape[2], embedded_sections.shape[1])) # (n_diffusers * 8 * n_sections, 218)
     for i in range(embedded_sections.shape[0]):
@@ -307,13 +489,11 @@ def load_reduce_cluster_save(pca_components, n_clusters: list[int], load_embedde
             reshaped_embedded[i * embedded_sections.shape[2] + j] = embedded_sections[i, :, j]
 
     # cluster the embedded sections
-    if method == "dbscan":
-        n_jobs = len(os.sched_getaffinity(0))
-        clustering = sklearn.cluster.DBSCAN(eps=1e-5, n_jobs=n_jobs, metric=jensenshannon)
-        pca_cluster = ClusterAgglomerative(clustering=clustering)
-        pca_cluster.fit(reshaped_embedded)
+    if method == "hdbscan":
+        pca_cluster = TICAhdbscan()
+        pca_cluster.fit(reshaped_embedded, embedded_sections)
         y = pca_cluster.predict()
-        n_clusters = len(set(y))
+        n_clusters = pca_cluster.centers.shape[0]
         cur_save_pca_cluster_path = save_pca_cluster_path.replace("#c#", f"{n_clusters}")
         with open(cur_save_pca_cluster_path, "wb") as f:
             pickle.dump(pca_cluster, f)
@@ -345,17 +525,18 @@ def load_reduce_cluster_save(pca_components, n_clusters: list[int], load_embedde
             pca_cluster = ClusterAgglomerative(clustering=clustering)
             pca_cluster.fit(reshaped_embedded)
         elif method == "faiss":
-            clustering = faiss.Kmeans(d=reshaped_embedded.shape[1], k=_n_clusters, spherical=True)
-            clustering.train(reshaped_embedded)
             pca_cluster = ClusterFaiss()
-            pca_cluster.fit(clustering, reshaped_embedded)
+            pca_cluster.fit(_n_clusters, reshaped_embedded)
+        elif method == "ticafaiss":
+            pca_cluster = TICAFaiss()
+            pca_cluster.fit(_n_clusters, reshaped_embedded, embedded_sections)
 
         cur_save_pca_cluster_path = save_pca_cluster_path.replace("#c#", f"{_n_clusters}")
         with open(cur_save_pca_cluster_path, "wb") as f:
             pickle.dump(pca_cluster, f)
         if save_clustered_path is not None:
             cur_save_clustered_path = save_clustered_path.replace("#c#", f"{_n_clusters}")
-            if method in ["agglomerative", "faiss"]:
+            if method in ["agglomerative", "faiss", "ticafaiss"]:
                 y = pca_cluster.y
             else:
                 y = pca_cluster.predict(reshaped_embedded)

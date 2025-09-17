@@ -75,7 +75,19 @@ def z_order_interactions_transition_matrix(tm, states):
 def z_order_get_only_state_to_idx_dict():
     anchor_coordinates = get_sorted_anchor_coordinates()
     
-    states = ["nuc"] + list(anchor_coordinates.keys()) + ["cyt"]
+    states = ["nuc"] + [f"nuc_channel_{i}" for i in range(8)] + fg_types_nc + [f"cyt_channel_{i}" for i in range(8)] +["cyt"]
+    state_to_idx = {state: idx for idx, state in enumerate(states)}
+    return state_to_idx
+
+def z_order_get_only_state_to_idx_dict_nc():
+    anchor_coordinates = get_sorted_anchor_coordinates()
+    fg_types = list(anchor_coordinates.keys())
+    fg_types_nc = []
+    for fg in fg_types:
+        type, number = fg.split("_", 1)
+        fg_types_nc.append(f"{type}_N_{number}")
+        fg_types_nc.append(f"{type}_C_{number}")
+    states = ["nuc"] + [f"nuc_channel_{i}" for i in range(8)] + fg_types_nc + [f"cyt_channel_{i}" for i in range(8)] +["cyt"]
     state_to_idx = {state: idx for idx, state in enumerate(states)}
     return state_to_idx
 

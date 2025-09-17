@@ -5,25 +5,48 @@ import scipy as sp
 import concurrent.futures
 import os
 
+def split_fg_trajectories_nc(fg_trajectories):
+    """
+    Args:
+        fg_trajectories (Dictionary(string : np.array)): a coordinates dictionary of shape {fg_type : [n_chains, n_beads, 3, n_t]}
+    Returns:
+        fg_trajectories_nc Dictionary(string : List(np.array)): a dictionary of shape {fg_type_<N/C> : [n_chains, n_beads/2, 3, n_t]}
+    """
+    fg_trajectories_nc = {}
+    for fg_type, coords in fg_trajectories.items():
+        n_beads = coords.shape[1]
+        fg_trajectories_nc[f"{fg_type}_N"] = coords[:, :n_beads//2, :, :]
+        fg_trajectories_nc[f"{fg_type}_C"] = coords[:, n_beads//2:, :, :]
+    return fg_trajectories_nc
 
-def categorize_diffusers(diffuser_coordinates, fg_coordinates, k, diffuser_radius_nm=3.5, max_surface_distance_nm=0.7):
+def categorize_diffusers(diffuser_coordinates, fg_coordinates, k, diffuser_radius_nm=3.5, max_surface_distance_nm=0.7, use_site_coords=False):
     """"Returns arrays containing the types and chain indices of the k closest FGs for each diffuser.
 
     Args:
-        diffuser_coordinates (np.array): a coordinates array of shape [n_diffusers, 3]
+        diffuser_coordinates (np.array): a coordinates array of shape [n_diffusers, 3] (unless use_site_coords is True, then shape [n_diffusers, n_sites, 3])
         fg_coordinates (Dictionary(string : np.array)): a coordinates dictionary of shape {fg_type : [n_chains, n_beads, 3]}
         k (int): Number of closest FGs to find for each diffuser
+        use_site_coords (bool): If True, diffuser_coordinates is expected to have shape [n_diffusers, n_sites, 3] and the minimum distance from any site to any FG bead will be used.
         
     Returns:
         np.array: Array of shape [n_diffusers, k] containing strings in format "<fg_type>_<chain_i>"
         or "cyt"/"nuc" if no FG is within max_distance.
     """
+    #todo implement use_site_coords
     FG_BEAD_RADIUS_NM=0.8
+    KAP_SITE_RADIUS_NM=0.6
     n_diffusers = diffuser_coordinates.shape[0]
     # Initialize results array
     result = np.full((n_diffusers, k), "cyt", dtype='U20')
     result[diffuser_coordinates[:,2] < 0, :] = "nuc"
-    
+    angles_radians = np.arctan2(diffuser_coordinates[:,1], diffuser_coordinates[:,0]) # [-pi, pi]
+    nuc_channel_mask = (diffuser_coordinates[:,2] < 15) & (diffuser_coordinates[:,2] > 0)
+    cyt_channel_mask = (diffuser_coordinates[:,2] < 0) & (diffuser_coordinates[:,2] > -15)
+    for i, angle in enumerate(np.arange(-np.pi, np.pi, np.pi/4)):
+        angle_mask = (angles_radians >= angle) & (angles_radians < angle + np.pi/4)
+        result[angle_mask & nuc_channel_mask, :] = f"nuc_channel_{int(i)}"
+        result[angle_mask & cyt_channel_mask, :] = f"cyt_channel_{int(i)}"
+
     # Pre-calculate total number of chains
     total_chains = sum(coords.shape[0] for coords in fg_coordinates.values())
     
@@ -64,18 +87,18 @@ def categorize_diffusers(diffuser_coordinates, fg_coordinates, k, diffuser_radiu
             
             # Get indices of k smallest distances
             k_smallest_indices = np.argsort(valid_distances)[:k]
-            result[i, :len(k_smallest_indices)] = valid_strings[k_smallest_indices]
+            result[i, :len(k_smallest_indices)] = valid_strings[k_smallest_indices]    
     
     return result
 
 
-def categorize_diffusers_over_time(diffuser_trajectories, fg_trajectories, k, step=1, diffuser_radius_nm=3.5):
+def categorize_diffusers_over_time(diffuser_trajectories, fg_trajectories, k, step=1, diffuser_radius_nm=3.5, max_surface_distance_nm=0.7):
     """
     returns array of shape [n_diffusers, k(closest), time]
     """
     n_diffusers = diffuser_trajectories.shape[0]
     n_t = diffuser_trajectories.shape[2]
-    n_t2 = fg_trajectories["Nup57"].shape[3]
+    n_t2 = list(fg_trajectories.values())[0].shape[3]
     if n_t != n_t2:
         raise Exception("Times not matching")
     n_columns = len(range(0, n_t, step))
@@ -83,7 +106,8 @@ def categorize_diffusers_over_time(diffuser_trajectories, fg_trajectories, k, st
     for t in range(0, n_t, step):
         cur_diffuser_trajectories = diffuser_trajectories[:, :, t]
         cur_fg_trajectories = {fg_type : fg_trajectories[:, :, :, t] for (fg_type, fg_trajectories) in fg_trajectories.items()}
-        categorized_trajectories[:,:,int(t / step)] = categorize_diffusers(cur_diffuser_trajectories, cur_fg_trajectories, k, diffuser_radius_nm=diffuser_radius_nm)
+        categorized_trajectories[:,:,int(t / step)] = categorize_diffusers(cur_diffuser_trajectories, cur_fg_trajectories, k, diffuser_radius_nm=diffuser_radius_nm, max_surface_distance_nm=max_surface_distance_nm)
+        
     return categorized_trajectories
 
 def normalize_rows(counts_matrix):
@@ -189,7 +213,7 @@ def generate_transition_matrix(data, fg_types, n_chains_per_fg, init_1 = False, 
 ###########################################################################################
 
 
-def categorize_multiples(sim_indexes, sim_times, diffuser_coords_path_prefix, fg_coords_path_prefix, step=1, save_file_path=None, k=1, diffuser_radius_nm=3.5):
+def categorize_multiples(sim_indexes, sim_times, diffuser_coords_path_prefix, fg_coords_path_prefix, step=1, save_file_path=None, k=1, diffuser_radius_nm=3.5, max_surface_distance_nm=0.7, split_nc=False):
     i_time_iterator = [(sim_i, time_i, time) for sim_i in sim_indexes for time_i, time in enumerate(sim_times)]
 
 
@@ -204,14 +228,17 @@ def categorize_multiples(sim_indexes, sim_times, diffuser_coords_path_prefix, fg
             diffuser_trajectories = pickle.load(f)
         with open(f"{fg_coords_path_prefix}/{sim_i}/{time}-fgs.pickle", "rb") as f:
             fg_trajectories = pickle.load(f)
-        categorized = categorize_diffusers_over_time(diffuser_trajectories, fg_trajectories, k=k, step=step, diffuser_radius_nm=diffuser_radius_nm)
+        if split_nc:
+            fg_trajectories = split_fg_trajectories_nc(fg_trajectories)
+        categorized = categorize_diffusers_over_time(diffuser_trajectories, fg_trajectories, k=k, step=step, diffuser_radius_nm=diffuser_radius_nm, max_surface_distance_nm=max_surface_distance_nm)
         arrays[sim_i - 1][time_i] = categorized
 
     num_processes = len(os.sched_getaffinity(0))
+    # num_processes = 1
     print(f"Using {num_processes} cores")
     with concurrent.futures.ThreadPoolExecutor(max_workers=num_processes) as executor:
         executor.map(process_file_worker, i_time_iterator)
-
+    print("")
     for i in range(len(arrays)):
         arrays[i] = np.concatenate(arrays[i], axis=2)
     all = np.concatenate(arrays, axis=0)

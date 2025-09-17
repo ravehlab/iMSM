@@ -8,11 +8,15 @@ import deeptime
 def normalize_rows(counts_matrix):
     transition_matrix = np.zeros_like(counts_matrix)
     n_states = counts_matrix.shape[0]
+    rows_0 = 0
     for i in range(n_states):
         row_sum = np.sum(counts_matrix[i, :])
         if row_sum == 0:
-            print(f"Row sum is 0, this shouldnt be happening !!!!!!!!!!!!!!!!!!!!!   :( ")
+            rows_0 += 1
+            continue
         transition_matrix[i, :] = counts_matrix[i, :] / row_sum
+    if rows_0 > 0:
+        print(f"Number of rows with all zero counts: {rows_0}    :(")
     return transition_matrix
 
 def generate_counts_matrix(data):    
@@ -72,12 +76,12 @@ def generate_transition_matrix(data, n_mesostates, prior=1):
     # mask = np.triu(np.ones((half_meso, half_meso)), k=0).astype(bool)
     # transition_matrix[half_meso:, half_meso:][mask] += prior
     transition_matrix += prior
-    # transition_matrix[0,0] += 100000
-    # transition_matrix[-1,-1] += 100000
+    # transition_matrix[0,0] += 10000000
+    # transition_matrix[-1,-1] += 10000000
     # transition_matrix += np.eye(n_mesostates) * prior
-    # transition_matrix += (np.diag(np.full(transition_matrix.shape[0]-1, prior * 0.5), k=1))
-    # transition_matrix += (np.diag(np.full(transition_matrix.shape[0]-1, prior * 0.5), k=-1))
-    
+    # transition_matrix += (np.diag(np.full(transition_matrix.shape[0]-1, prior * 0.005), k=1))
+    # transition_matrix += (np.diag(np.full(transition_matrix.shape[0]-1, prior * 0.005), k=-1))
+
     # smooth the matrix with a 3x3 moving average on interior (leaves border rows/cols unchanged)
     # kern = np.ones((3, 3)) / 9.0
     # sub = transition_matrix[1:-1, 1:-1]
