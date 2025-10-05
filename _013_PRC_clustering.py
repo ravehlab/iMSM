@@ -1,3 +1,4 @@
+from re import split
 from xml.parsers.expat import model
 from networkx import clustering
 import scipy as sp
@@ -5,7 +6,7 @@ from sklearn.base import ClusterMixin
 from deeptime.decomposition import TICA, VAMP
 import sklearn.cluster
 from sklearn.decomposition import PCA
-from utils import z_order_get_only_state_to_idx_dict, z_order_get_only_state_to_idx_dict_nc
+from utils import z_order_get_only_state_to_idx_dict, z_order_get_only_state_to_idx_dict_nc, z_order_get_only_state_to_idx_dict_nmc
 from utils_custom_kmeans import CustomKMeans
 from banditpam import KMedoids
 import numpy as np
@@ -118,6 +119,7 @@ class ClusterFaiss:
 
         self.centers = np.power(clustering.centroids, 2) # to get a distribution that sums to 1
         # self.centers = clustering.centroids
+        # self.centers = clustering.centroids
         _, y = clustering.assign(X)
         # sort the centers by z in inverse tranformation
         sorted_indices = sort_cluster_centers(self.centers)
@@ -197,11 +199,11 @@ class TICAFaiss:
 
         # Calc inverse transform
         model = tica.fetch_model()
-        U = model.instantaneous_coefficients[:,:dim]
+        U = model.instantaneous_coefficients
         U_pinv = np.linalg.pinv(U.T)  # Pseudoinverse of U⊤
         # Approximate inverse transform (back to feature space)
         # Note: This assumes identity basis functions (χ₀(x) = x)
-        self.inverse_centers = (U_pinv @ self.centers.T).T + model.mean_0
+        self.inverse_centers = (self.centers @ U_pinv.T[:dim, :]) + model.mean_0
         # normalize the centers to be a distribution
         self.inverse_centers[self.inverse_centers < 0] = 0
         self.inverse_centers = self.inverse_centers / self.inverse_centers.sum(axis=1, keepdims=True)
@@ -212,6 +214,36 @@ class TICAFaiss:
         self.y = np.array([index_to_new_index[i] for i in self.y])
         self.centers = self.centers[sorted_indices]
         self.inverse_centers = self.inverse_centers[sorted_indices]
+        
+        # Check for near-duplicate centers and remove them
+        unique_centers = []
+        unique_indices = []
+        center_mapping = {}  # maps old index to new index
+
+        for i, center in enumerate(self.inverse_centers):
+            is_duplicate = False
+            for j, unique_center in enumerate(unique_centers):
+                # Calculate L2 distance between centers
+                distance = np.linalg.norm(center - unique_center)
+                if distance < 0.05:
+                    is_duplicate = True
+                    center_mapping[i] = j
+                    break
+            
+            if not is_duplicate:
+                unique_centers.append(center)
+                unique_indices.append(i)
+                center_mapping[i] = len(unique_centers) - 1
+
+        # Update centers and labels
+        self.inverse_centers = np.array(unique_centers)
+        n_unique_clusters = len(unique_centers)
+
+        # Update y labels to map to new cluster indices
+        self.y = np.array([center_mapping[label] for label in self.y])
+
+        print(f"Reduced from {n_clusters} to {n_unique_clusters} clusters after removing duplicates")
+            
         
         return self
     
@@ -362,14 +394,16 @@ def multi_divide_to_sections(categorized_trajectories, window_size):
         divided_trajectories[i] = divide_to_sections(categorized_trajectories[i], window_size)
     return divided_trajectories
     
-def embed_section(section, state_to_idx_dict, split_nc=False):
+def embed_section(section, state_to_idx_dict, split_nc=None):
     """
     return: shape [total_nups + 4(=220) OR total_nups * 2 + 18(=450),]
     """
     indexed_section = np.zeros_like(section, dtype=int)
     for i, state in enumerate(section):
         indexed_section[i] = state_to_idx_dict[state]
-    if split_nc:
+    if split_nc == "nmc":
+        return np.bincount(indexed_section, minlength=458) / len(indexed_section)
+    elif split_nc == "nc":
         return np.bincount(indexed_section, minlength=450) / len(indexed_section)
     else:
         return np.bincount(indexed_section, minlength=220) / len(indexed_section)
@@ -390,7 +424,7 @@ def sort_cluster_centers(centers):
     # sorted_centers = centers[sorted_indices]
     return sorted_indices
 
-def load_embed_save(window_size, load_categorized_path, save_embedded_path, save_embedded_eighth_path, split_nc=False):
+def load_embed_save(window_size, load_categorized_path, save_embedded_path, save_embedded_eighth_path, split_nc=None):
     with open(load_categorized_path, "rb") as f:
         categorized_trajectories = pickle.load(f)
 
@@ -412,7 +446,9 @@ def load_embed_save(window_size, load_categorized_path, save_embedded_path, save
     ##########
     # Embed Sections
     ##########
-    if split_nc:
+    if split_nc == "nmc":
+        state_to_idx_dict = z_order_get_only_state_to_idx_dict_nmc()
+    elif split_nc == "nc":
         state_to_idx_dict = z_order_get_only_state_to_idx_dict_nc()
     else:
         state_to_idx_dict = z_order_get_only_state_to_idx_dict()

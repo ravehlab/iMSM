@@ -4,6 +4,8 @@ from collections import defaultdict
 import scipy as sp
 import concurrent.futures
 import os
+from scipy.spatial import cKDTree
+
 
 def split_fg_trajectories_nc(fg_trajectories):
     """
@@ -19,6 +21,25 @@ def split_fg_trajectories_nc(fg_trajectories):
         fg_trajectories_nc[f"{fg_type}_C"] = coords[:, n_beads//2:, :, :]
     return fg_trajectories_nc
 
+def calc_formatted_strings_matrix(fg_coordinates):
+    LONGEST_CHAIN_BEADS = 48
+    total_chains = sum(coords.shape[0] for coords in fg_coordinates.values())
+    all_formatted_strings = np.empty((total_chains, LONGEST_CHAIN_BEADS), dtype='U20')
+
+    current_idx = 0
+    for fg_type, coords in fg_coordinates.items():
+        n_chains = coords.shape[0]
+        # Pre-format all strings at once using vectorized operations
+        chain_strings = np.array([f"{fg_type}_{i:02d}" for i in range(n_chains)])
+        # Use broadcasting to fill all columns at once instead of looping
+        all_formatted_strings[current_idx:current_idx + n_chains, :] = chain_strings[:, np.newaxis]
+        
+        current_idx += n_chains
+    
+    return all_formatted_strings
+    
+    
+
 def categorize_diffusers(diffuser_coordinates, fg_coordinates, k, diffuser_radius_nm=3.5, max_surface_distance_nm=0.7, use_site_coords=False):
     """"Returns arrays containing the types and chain indices of the k closest FGs for each diffuser.
 
@@ -33,63 +54,114 @@ def categorize_diffusers(diffuser_coordinates, fg_coordinates, k, diffuser_radiu
         or "cyt"/"nuc" if no FG is within max_distance.
     """
     #todo implement use_site_coords
+    # todo swithc nuc cyt channel
     FG_BEAD_RADIUS_NM=0.8
     KAP_SITE_RADIUS_NM=0.6
+    
+    max_distance = diffuser_radius_nm + max_surface_distance_nm + FG_BEAD_RADIUS_NM
     n_diffusers = diffuser_coordinates.shape[0]
-    # Initialize results array
+    
+    # Initialize results
     result = np.full((n_diffusers, k), "cyt", dtype='U20')
     result[diffuser_coordinates[:,2] < 0, :] = "nuc"
-    angles_radians = np.arctan2(diffuser_coordinates[:,1], diffuser_coordinates[:,0]) # [-pi, pi]
-    nuc_channel_mask = (diffuser_coordinates[:,2] < 15) & (diffuser_coordinates[:,2] > 0)
-    cyt_channel_mask = (diffuser_coordinates[:,2] < 0) & (diffuser_coordinates[:,2] > -15)
+    
+    # Handle channels
+    angles_radians = np.arctan2(diffuser_coordinates[:,1], diffuser_coordinates[:,0])
+    cyt_channel_mask = (diffuser_coordinates[:,2] < 15) & (diffuser_coordinates[:,2] > 5)
+    mid_channel_mask = (diffuser_coordinates[:,2] < 5) & (diffuser_coordinates[:,2] > -5)
+    nuc_channel_mask = (diffuser_coordinates[:,2] < 5) & (diffuser_coordinates[:,2] > -15)
+    
     for i, angle in enumerate(np.arange(-np.pi, np.pi, np.pi/4)):
         angle_mask = (angles_radians >= angle) & (angles_radians < angle + np.pi/4)
-        result[angle_mask & nuc_channel_mask, :] = f"nuc_channel_{int(i)}"
         result[angle_mask & cyt_channel_mask, :] = f"cyt_channel_{int(i)}"
-
-    # Pre-calculate total number of chains
-    total_chains = sum(coords.shape[0] for coords in fg_coordinates.values())
+        result[angle_mask & mid_channel_mask, :] = f"mid_channel_{int(i)}"
+        result[angle_mask & nuc_channel_mask, :] = f"nuc_channel_{int(i)}"
+        
     
-    # Pre-allocate arrays for all chains
-    all_min_distances = np.zeros((n_diffusers, total_chains))
-    all_formatted_strings = np.empty(total_chains, dtype='U20')
+    # Build KDTree with all FG beads
+    all_beads = []
+    all_labels = []
     
-    # Calculate minimum distances for all chains at once
-    current_idx = 0
     for fg_type, coords in fg_coordinates.items():
-        n_chains = coords.shape[0]
+        n_chains, n_beads = coords.shape[:2]
+        beads = coords.reshape(-1, 3) # [n_chains * n_beads, 3]
+        all_beads.append(beads)
         
-        # Generate formatted strings for this FG type
-        chain_strings = np.array([f"{fg_type}_{i:02d}" for i in range(n_chains)])
-        all_formatted_strings[current_idx:current_idx + n_chains] = chain_strings
+        # Create labels for each bead
+        for chain_i in range(n_chains):
+            for bead_j in range(n_beads):
+                all_labels.append(f"{fg_type}_{chain_i:02d}")
         
-        # Reshape arrays for broadcasting
-        chains_reshaped = coords.reshape(n_chains, -1, 3)  # [n_chains, n_beads, 3]
-        diffusers_expanded = diffuser_coordinates[:, np.newaxis, np.newaxis, :]  # [n_diffusers, 1, 1, 3]
-        
-        # Calculate distances to all beads for all chains at once
-        distances = np.linalg.norm(chains_reshaped[np.newaxis, :, :, :] - diffusers_expanded, axis=3)
-        
-        # Find minimum distance per chain
-        all_min_distances[:, current_idx:current_idx + n_chains] = np.min(distances, axis=2)
-        
-        current_idx += n_chains
+    all_beads = np.vstack(all_beads)
+    all_labels = np.array(all_labels)
     
-    # Process each diffuser using vectorized operations
+    # Build KDTree
+    tree = cKDTree(all_beads)
+    
+    # Query for k nearest neighbors within max_distance
+    distances, indices = tree.query(diffuser_coordinates, k=k, distance_upper_bound=max_distance)
+    
+    # Handle the case where fewer than k neighbors are found
     for i in range(n_diffusers):
-        # Find valid distances within max_distance
-        valid_mask = all_min_distances[i] <= diffuser_radius_nm + max_surface_distance_nm + FG_BEAD_RADIUS_NM
-        
-        if np.any(valid_mask):
-            # Get valid distances and their indices
-            valid_distances = all_min_distances[i][valid_mask]
-            valid_strings = all_formatted_strings[valid_mask]
-            
-            # Get indices of k smallest distances
-            k_smallest_indices = np.argsort(valid_distances)[:k]
-            result[i, :len(k_smallest_indices)] = valid_strings[k_smallest_indices]    
+        valid_indices = indices[i][distances[i] < np.inf]
+        if len(valid_indices) > 0:
+            result[i, :len(valid_indices)] = all_labels[valid_indices]
     
     return result
+    
+    
+    # n_diffusers = diffuser_coordinates.shape[0]
+    # # Initialize results array
+    # result = np.full((n_diffusers, k), "cyt", dtype='U20')
+    # result[diffuser_coordinates[:,2] < 0, :] = "nuc"
+    # angles_radians = np.arctan2(diffuser_coordinates[:,1], diffuser_coordinates[:,0]) # [-pi, pi]
+    # cyt_channel_mask = (diffuser_coordinates[:,2] < 15) & (diffuser_coordinates[:,2] > 0)
+    # nuc_channel_mask = (diffuser_coordinates[:,2] < 0) & (diffuser_coordinates[:,2] > -15)
+    # for i, angle in enumerate(np.arange(-np.pi, np.pi, np.pi/4)):
+    #     angle_mask = (angles_radians >= angle) & (angles_radians < angle + np.pi/4)
+    #     result[angle_mask & nuc_channel_mask, :] = f"nuc_channel_{int(i)}"
+    #     result[angle_mask & cyt_channel_mask, :] = f"cyt_channel_{int(i)}"
+
+    # # Pre-calculate total number of chains
+    # total_chains = sum(coords.shape[0] for coords in fg_coordinates.values())
+    
+    # # Pre-allocate arrays for all chains
+    # LONGEST_CHAIN_BEADS = 48
+    # all_distances = np.inf * np.ones((n_diffusers, total_chains, LONGEST_CHAIN_BEADS))
+    # if all_formatted_strings is None:
+    #     all_formatted_strings = calc_formatted_strings_matrix(fg_coordinates)
+            
+    # # Calculate minimum distances for all chains at once
+    # current_idx = 0
+    # for fg_type, coords in fg_coordinates.items():
+    #     n_chains = coords.shape[0]
+    #     n_beads = coords.shape[1]
+
+    #     # Reshape arrays for broadcasting
+    #     chains_reshaped = coords.reshape(n_chains, -1, 3)  # [n_chains, n_beads, 3]
+    #     diffusers_expanded = diffuser_coordinates[:, np.newaxis, np.newaxis, :]  # [n_diffusers, 1, 1, 3]
+        
+    #     # Calculate distances to all beads for all chains at once
+    #     distances = np.linalg.norm(chains_reshaped[np.newaxis, :, :, :] - diffusers_expanded, axis=3) # [n_diffusers, n_chains, n_beads]
+    #     all_distances[:, current_idx:current_idx + n_chains, :n_beads] = distances
+        
+    #     current_idx += n_chains
+    
+    # # Process each diffuser using vectorized operations
+    # for i in range(n_diffusers):
+    #     # Find valid distances within max_distance
+    #     valid_mask = all_distances[i] <= diffuser_radius_nm + max_surface_distance_nm + FG_BEAD_RADIUS_NM # [total_chains, LONGEST_CHAIN_BEADS]
+        
+    #     if np.any(valid_mask):
+    #         # Get valid distances and their indices
+    #         valid_distances = all_distances[i][valid_mask]
+    #         valid_strings = all_formatted_strings[valid_mask]
+            
+    #         # Get indices of k smallest distances
+    #         k_smallest_indices = np.argsort(valid_distances)[:k]
+    #         result[i, :len(k_smallest_indices)] = valid_strings[k_smallest_indices]    
+    
+    # return result
 
 
 def categorize_diffusers_over_time(diffuser_trajectories, fg_trajectories, k, step=1, diffuser_radius_nm=3.5, max_surface_distance_nm=0.7):
@@ -102,10 +174,13 @@ def categorize_diffusers_over_time(diffuser_trajectories, fg_trajectories, k, st
     if n_t != n_t2:
         raise Exception("Times not matching")
     n_columns = len(range(0, n_t, step))
+    all_formatted_strings = None
     categorized_trajectories = np.zeros(shape=(n_diffusers, k, n_columns), dtype='U20')
     for t in range(0, n_t, step):
         cur_diffuser_trajectories = diffuser_trajectories[:, :, t]
         cur_fg_trajectories = {fg_type : fg_trajectories[:, :, :, t] for (fg_type, fg_trajectories) in fg_trajectories.items()}
+        # if all_formatted_strings is None:
+        #     all_formatted_strings = calc_formatted_strings_matrix(cur_fg_trajectories)
         categorized_trajectories[:,:,int(t / step)] = categorize_diffusers(cur_diffuser_trajectories, cur_fg_trajectories, k, diffuser_radius_nm=diffuser_radius_nm, max_surface_distance_nm=max_surface_distance_nm)
         
     return categorized_trajectories
