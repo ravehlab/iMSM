@@ -1,3 +1,4 @@
+from math import e
 from scipy.fftpack import shift
 from sklearn.base import ClusterMixin
 from deeptime.decomposition import TICA
@@ -592,7 +593,7 @@ def load_cluster_trajectories_save(n_clusters: list[int], load_embedded_path, lo
 # NEW       
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~  
-def load_embed_save_2(window_size, load_categorized_path, save_embedded_path, split_nc=None):
+def load_embed_save_2(window_size, load_categorized_path, save_embedded_path, split_nc=None, save_embedded_eighth_path=None):
     with open(load_categorized_path, "rb") as f:
         categorized_trajectories = pickle.load(f)
      
@@ -625,7 +626,6 @@ def load_embed_save_2(window_size, load_categorized_path, save_embedded_path, sp
 def calc_shift_indices():
     z_order_dict = z_order_get_only_state_to_idx_dict_nmc()
     keys = list(z_order_dict.keys())
-    print(len(keys)) 
     keys = np.array(keys)[np.newaxis, np.newaxis, :]
     shift_indices = []
     for shift in range(8):
@@ -637,26 +637,34 @@ def calc_shift_indices():
         shift_indices.append(indices)
     return shift_indices
 
-def load_reduce_cluster_save_2(pca_components, n_clusters: list[int], load_embedded_path, save_pca_cluster_path, save_clustered_path = None, verbose: bool = False):
+shift_indices = calc_shift_indices()
+def sym_plus_n(X, n):
+    n = n % 8
+    X = X[:, shift_indices[n]]
+    return X
+
+def load_reduce_cluster_save_2(pca_components, n_clusters: list[int], load_embedded_path, save_pca_cluster_path, save_clustered_path = None, verbose: bool = False, data_subset=None, data_subset_index=None):
     # reshape to [n_diffusers * n_sections, 218]
     with open(load_embedded_path, "rb") as f:
         embedded_sections = pickle.load(f) # (n_diffusers, 218, n_sections)
+        
+    if (data_subset is not None) and (data_subset != 1):   
+        n_sections = embedded_sections.shape[2]         
+        new_n_sections = int(n_sections * data_subset)
+        if data_subset_index is None or data_subset_index == -1:
+            data_subset_index = (n_sections // new_n_sections) - 1
+        embedded_sections = embedded_sections[:, :, data_subset_index * new_n_sections:(data_subset_index + 1) * new_n_sections]
+        
 
     reshaped_embedded = np.zeros((embedded_sections.shape[0] * embedded_sections.shape[2], embedded_sections.shape[1])) # (n_diffusers * n_sections, 218)
     for i in range(embedded_sections.shape[0]):
         for j in range(embedded_sections.shape[2]):
             reshaped_embedded[i * embedded_sections.shape[2] + j] = embedded_sections[i, :, j]
     
-    shift_indices = calc_shift_indices()
-    def sym_plus_n(X, n):
-        n = n % 8
-        X = X[shift_indices[n]]
-        return X
-    
     for _n_clusters in n_clusters:
         if verbose:
             print(f"n_clusters: {_n_clusters}")
-        pca_cluster = SKM(d=reshaped_embedded.shape[1], k=_n_clusters, niter=300, sym_plus_n_func=sym_plus_n)
+        pca_cluster = SKM(d=reshaped_embedded.shape[1], k=_n_clusters, niter=10, sym_plus_n_func=sym_plus_n, nsym=8)
         pca_cluster.fit(reshaped_embedded)
 
         cur_save_pca_cluster_path = save_pca_cluster_path.replace("#c#", f"{_n_clusters}")
