@@ -643,17 +643,31 @@ def sym_plus_n(X, n):
     X = X[:, shift_indices[n]]
     return X
 
-def load_reduce_cluster_save_2(pca_components, n_clusters: list[int], load_embedded_path, save_pca_cluster_path, save_clustered_path = None, verbose: bool = False, data_subset=None, data_subset_index=None):
+def load_reduce_cluster_save_2(pca_components, n_clusters: list[int], load_embedded_path, save_pca_cluster_path, save_clustered_path = None, verbose: bool = False, data_subset=None, data_subset_index=None, data_subset_mode=None, n_sims=None):
     # reshape to [n_diffusers * n_sections, 218]
     with open(load_embedded_path, "rb") as f:
         embedded_sections = pickle.load(f) # (n_diffusers, 218, n_sections)
         
-    if (data_subset is not None) and (data_subset != 1):   
-        n_sections = embedded_sections.shape[2]         
-        new_n_sections = int(n_sections * data_subset)
-        if data_subset_index is None or data_subset_index == -1:
-            data_subset_index = (n_sections // new_n_sections) - 1
-        embedded_sections = embedded_sections[:, :, data_subset_index * new_n_sections:(data_subset_index + 1) * new_n_sections]
+    if (data_subset is not None) and (data_subset != 1):
+        if data_subset_mode == "time":
+            print("Using data subset mode: time")
+            n_sections = embedded_sections.shape[2]         
+            new_n_sections = int(n_sections * data_subset)
+            if data_subset_index is None or data_subset_index == -1:
+                data_subset_index = (n_sections // new_n_sections) - 1
+            embedded_sections = embedded_sections[:, :, data_subset_index * new_n_sections:(data_subset_index + 1) * new_n_sections]
+        if data_subset_mode == "simulation":
+            print("Using data subset mode: simulations")
+            if n_sims is None:
+                raise ValueError("n_sims must be provided when data_subset_mode is 'simulations'")
+            n_diffusers = embedded_sections.shape[0]         
+            diffusers_per_sim = n_diffusers // n_sims
+            new_n_sims = int(n_sims * data_subset)
+            if data_subset_index is None or data_subset_index == -1:
+                data_subset_index = (n_sims // new_n_sims) - 1
+            embedded_sections = embedded_sections[data_subset_index * new_n_sims * diffusers_per_sim:(data_subset_index + 1) * new_n_sims * diffusers_per_sim, :, :]
+        else:
+            raise ValueError("data_subset_mode must be either 'time' or 'simulation'")
         
 
     reshaped_embedded = np.zeros((embedded_sections.shape[0] * embedded_sections.shape[2], embedded_sections.shape[1])) # (n_diffusers * n_sections, 218)

@@ -383,8 +383,10 @@ def load_fg_data(
             traj_i = int(f_id + ((rmf_t - start_t) / step_t) * frames_per_file)
 
             # Read data
+            
             for nup_i, fg_type in enumerate(fg_types):
                 for chain_i in range(n_chains_per_fg[nup_i]):
+                    
                     for bead_i in range(n_beads_per_fg[nup_i]):
                         coord = rff.get(type2chains[fg_type][chain_i][bead_i]).get_translation()
                         trajectories[fg_type][chain_i, bead_i, 0, traj_i] = coord[0] / 10

@@ -512,10 +512,10 @@ def visualize_arrows_between_mesostates(P, fig, ax, good_cluster_indices, mus, s
         if show_colorbar_title:
             cbar.ax.set_title(r'Transition Rate $\log_{10} (\frac{1}{\mu s})$', fontsize=14)
 
-def visualize_pie_mesostates(clusters, P, ax2, good_cluster_indices, mus, pie_colors, alpha = 0.8, add_nucleus_cytoplasm_text=True):
+def visualize_pie_mesostates(clusters, P, ax2, good_cluster_indices, mus, pie_colors, alpha = 0.8, add_nucleus_cytoplasm_text=True, pie_scaling = 15):
     # stationary_dist = stationary_distribution(P)
     stationary_dist = np.power(stationary_distribution(P), 1/3)  # Adjusted for better visualization
-    radii = stationary_dist[good_cluster_indices] * 15 # scale for visibility
+    radii = stationary_dist[good_cluster_indices] * pie_scaling # scale for visibility
     for i, cluster_i in enumerate(good_cluster_indices):
         radius = radii[i]
         cluster = clusters[cluster_i]
@@ -585,6 +585,26 @@ def estimate_cluters_mu_cov(n_samples, clusters, coordinate_edges, good_cluster_
         cov = np.cov(spatial_coordinates, rowvar=False)
         covs.append(cov)
     return np.array(mus), np.array(covs)
+
+def estimate_unprojected_mus(n_samples, clusters, coordinate_edges, good_cluster_indices):
+    mus = []
+    for cluster_i in good_cluster_indices:
+        cluster = clusters[cluster_i]
+        spatial_coordinates = sample_from_cluster(cluster, n_samples, coordinate_edges) # keep all coordinates
+        
+        mu_x = np.mean(spatial_coordinates[:, 0])
+        mu_z = np.mean(spatial_coordinates[:, 2])
+        if cluster[0] > 0.9 or cluster[-1] > 0.9:
+            mu_y = np.mean(spatial_coordinates[:, 1])
+        else:
+            cluster_no_nuc_cyt = cluster.copy()
+            cluster_no_nuc_cyt[0] = 0
+            cluster_no_nuc_cyt[-1] = 0
+            spatial_coordinates_no_nuc_cyt = sample_from_cluster(cluster_no_nuc_cyt, n_samples, coordinate_edges)
+            mu_y = np.mean(spatial_coordinates_no_nuc_cyt[:, 1])
+        mu = np.array([mu_x, mu_y, mu_z])
+        mus.append(mu)
+    return np.array(mus)
 
 def visualize_mesostates_guassians(n_samples, clusters, coordinate_edges, ax1, good_cluster_indices, colors, mus, covs, confidence_level=0.1, viz_contours=True):
     for color_i, cluster_i in enumerate(good_cluster_indices):
@@ -817,7 +837,25 @@ def master_plot(tm_path, cluster_path, embedded_path, n_samples=2000, n_macrosta
 # REMEMBER I CAN SHOW THE MACROSTATE BOUNDARIES (panel b)
 
 
-def comparison_plot(base_tm_path, base_cluster_path, radii, n_sites, title, in_out_flow=None):
+def pick_good_clusters_by_mu_angle(mus, clusters, angle_threshold_degrees=90, angle_shift_degrees=0):
+    good_cluster_indices = [] 
+    angle_threshold_radians = np.radians(angle_threshold_degrees)
+    angle_shift_radians = np.radians(angle_shift_degrees)
+
+    
+    # Include clusters with >= 75% in the nuc and cyt microstates
+    for cluster_i, cluster in enumerate(clusters):
+        if ((cluster[0]) >= 0.75 or (cluster[-1] >= 0.75)):
+            good_cluster_indices.append(cluster_i)
+            continue 
+        
+        mu = mus[cluster_i]
+        angle = np.arctan2(mu[1], mu[0]) + angle_shift_radians  # angle in radians
+        if -angle_threshold_radians <= angle <= angle_threshold_radians:
+            good_cluster_indices.append(cluster_i)
+    return good_cluster_indices
+
+def comparison_plot(base_tm_path, base_cluster_path, radii, n_sites, title, in_out_flow=None, ignored_nup_types=None, add_mini_titles=False, pie_scaling=15):
     n_samples = 2000
     fig_x = len(n_sites)
     fig_y = len(radii)
@@ -836,10 +874,22 @@ def comparison_plot(base_tm_path, base_cluster_path, radii, n_sites, title, in_o
     
     # Adjusted title y-position for the taller figure
     fig.suptitle(title, fontsize=20, y=0.95)
+    
+    pie_colors = PIE_COLORS
+    if ignored_nup_types is not None:
+        pie_colors = PIE_COLORS.copy()
+        for nup_type in ignored_nup_types:
+            if nup_type in PIE_COLORS_DICT:
+                color_to_remove = PIE_COLORS_DICT[nup_type]
+                if color_to_remove in pie_colors:
+                    pie_colors.remove(color_to_remove)
+
 
     for j, r in enumerate(reversed(radii)):
         print("kda: ", radius_a_to_kda(r))
         for i, n in enumerate(n_sites):
+            if add_mini_titles:
+                axes[j, i].set_title(f'Radius: {r} nm, n_sites: {n}', fontsize=14)
             # set range of axes
             axes[j, i].set_xlim(-30, 30)
             axes[j, i].set_ylim(-40, 40)
@@ -860,11 +910,13 @@ def comparison_plot(base_tm_path, base_cluster_path, radii, n_sites, title, in_o
                 continue
             
             good_mesostate_indices = list(range(len(clusters)))
-            
+
+            unprojected_mus = estimate_unprojected_mus(n_samples, clusters, coordinate_edges, good_mesostate_indices)
+            good_mesostate_indices = pick_good_clusters_by_mu_angle(unprojected_mus, clusters, angle_threshold_degrees=90, angle_shift_degrees=0)
             mus, covs = estimate_cluters_mu_cov(n_samples, clusters, coordinate_edges, good_mesostate_indices)
             
             visualize_arrows_between_mesostates(P, fig, axes[j, i], good_mesostate_indices, mus, show_colorbar_title=False, in_out_flow=in_out_flow, show_colorbar=False)
-            visualize_pie_mesostates(clusters, P, axes[j, i], good_mesostate_indices, mus, PIE_COLORS, add_nucleus_cytoplasm_text=True)
+            visualize_pie_mesostates(clusters, P, axes[j, i], good_mesostate_indices, mus, PIE_COLORS, add_nucleus_cytoplasm_text=True, pie_scaling=pie_scaling)
             add_npc_scaffold_picture(axes[j, i])
             
     # Removed the 'big_ax' block (plot level axis arrows) entirely.
