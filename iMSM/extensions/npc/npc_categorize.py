@@ -1,7 +1,6 @@
 import numpy as np
 import pickle
 from collections import defaultdict
-import scipy as sp
 import concurrent.futures
 import os
 from scipy.spatial import cKDTree
