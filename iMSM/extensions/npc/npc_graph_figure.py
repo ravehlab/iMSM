@@ -1,7 +1,8 @@
 import numpy as np
+import sys
 import pickle
 from scipy.spatial import ConvexHull
-import pygpcca
+# import pygpcca
 from scipy.stats import multivariate_normal, chi2
 from scipy.interpolate import splprep, splev
 import matplotlib.pyplot as plt
@@ -13,6 +14,8 @@ import matplotlib.patheffects as path_effects
 import networkx as nx
 import itertools as it
 from iMSM.extensions.npc.npc_utils import get_sorted_anchor_coordinates, get_sorted_anchor_coordinates_np, infinitesimal_generator, stationary_distribution, radius_a_to_kda
+import iMSM.extensions.npc.npc_embed_cluster
+sys.modules['_013_PRC_clustering'] = iMSM.extensions.npc.npc_embed_cluster # fix for old file name
 
 ############################
 # CLUSTER ANALYSIS HELPERS #
@@ -441,13 +444,13 @@ def visualize_gpcca(n_macrostates, ax, mus, macrostate_assignments, viz_gpcca=Tr
     
     return meta_mus, valid_macrostates
 
-def evaluate_gpcca(n_macrostates, P, method="brandts"):    
-    gpcca = pygpcca.GPCCA(P,
-                          eta=None, # input probably can be None cause reversible assumption?
-                          z="LM",
-                          method=method)
-    gpcca.optimize(n_macrostates)
-    return gpcca
+# def evaluate_gpcca(n_macrostates, P, method="brandts"):    
+#     gpcca = pygpcca.GPCCA(P,
+#                           eta=None, # input probably can be None cause reversible assumption?
+#                           z="LM",
+#                           method=method)
+#     gpcca.optimize(n_macrostates)
+#     return gpcca
 
 def visualize_arrows_between_mesostates(P, fig, ax, good_cluster_indices, mus, show_colorbar_title=True, in_out_flow=None, show_colorbar=True):
     Q = infinitesimal_generator(P, dt=1) # rate at 1 / us

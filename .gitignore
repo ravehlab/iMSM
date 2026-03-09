@@ -6,5 +6,8 @@
 *.html
 *.pyc
 *.rmf
+*.dcd
+*.dms
+*.pdb
 .vscode
 data/chignolin
