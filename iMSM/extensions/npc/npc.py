@@ -79,6 +79,11 @@ class iMSMConfig:
     # --- Stage 7: Stats ---
     state_choice_method: str = "prominent" # options: "prominent", "distance"
     distance_state_threshold_nm: float = 10 # only used if STATE_CHOICE_METHOD is "distance"
+    # If set, uses a sigmoid soft-assignment around ±distance_state_threshold_nm instead of a
+    # hard threshold.  soft_scale_nm is the sigmoid scale parameter: weight → 0.5 at the
+    # threshold and → 0/1 at ±∞.  A value of ~2–5 nm is a reasonable starting point.
+    # Set to None (default) to keep the original hard-threshold behaviour.
+    soft_scale_nm: Optional[float] = None
     
     def to_legacy_dict(self):
         """Converts snake_case config to the UPPER_CASE dict expected by stages."""
@@ -358,7 +363,141 @@ def mm_permiability(tm, bottom_states=None, top_states=None):
     
     return perm
 
-def get_top_bottom_states(clustering, state_choice_method, distance_state_threshold_nm, clustered=None):
+def mm_permeability_trajectory(tm, bottom_states, top_states,
+                               n_trajectories=1000, traj_length=1000,
+                               lagtime_s=1e-6):
+    """
+    Permeability estimate via Markov chain trajectory simulation.
+
+    Counts transport events (bottom→top or top→bottom crossings) along
+    simulated trajectories.  Supports both hard and soft state assignments:
+
+    Hard assignment (original behaviour)
+    -------------------------------------
+    Pass integer index arrays for bottom_states / top_states.  A transport
+    event adds 1 to the counter each time the trajectory commits to the
+    opposite endpoint set.
+
+    Soft assignment (sigmoid weights)
+    ----------------------------------
+    Pass float arrays of shape (n_states,) with values in [0, 1] — e.g. the
+    output of get_top_bottom_states(..., soft_scale_nm=...).  Each crossing
+    contributes ``last_weight × current_weight`` instead of 1, smoothly
+    down-weighting states near the threshold boundary.
+
+    Parameters
+    ----------
+    tm : np.ndarray, shape (n, n)
+        Row-stochastic transition matrix.
+    bottom_states : array-like of int **or** np.ndarray of float
+        Hard indices *or* per-state soft weights for the bottom endpoint set.
+    top_states : array-like of int **or** np.ndarray of float
+        Hard indices *or* per-state soft weights for the top endpoint set.
+    n_trajectories : int
+        Number of independent Markov chain trajectories to simulate.
+    traj_length : int
+        Number of steps per trajectory.
+    lagtime_s : float
+        Lagtime per step in seconds (default 1e-6 = 1 µs).
+
+    Returns
+    -------
+    float
+        Permeability in units of events / s / µM / NPC.
+    """
+    from iMSM.extensions.npc.npc_utils import amount_to_concentration
+
+    n_states = tm.shape[0]
+
+    # ------------------------------------------------------------------ #
+    # Resolve bottom / top descriptors into per-state weight arrays.       #
+    # Float arrays → soft weights (passed through directly).              #
+    # Integer arrays → hard 0/1 weights.                                  #
+    # ------------------------------------------------------------------ #
+    _bot = np.asarray(bottom_states)
+    _top = np.asarray(top_states)
+    if _bot.dtype.kind == 'f':
+        # Soft weights provided directly (shape must be (n_states,))
+        bottom_w = _bot
+        top_w    = _top
+    else:
+        # Hard integer indices → binary weight arrays
+        bottom_w = np.zeros(n_states)
+        bottom_w[_bot.astype(int)] = 1.0
+        top_w = np.zeros(n_states)
+        top_w[_top.astype(int)] = 1.0
+
+    # Stationary distribution for trajectory initialisation
+    eigenvalues, eigenvectors = np.linalg.eig(tm.T)
+    idx = np.argmin(np.abs(eigenvalues - 1.0))
+    stat_dist = np.real(eigenvectors[:, idx])
+    stat_dist = np.abs(stat_dist)
+    stat_dist /= stat_dist.sum()
+
+    # Cumulative-sum rows for O(log n) state sampling; clip last column to 1
+    cum_tm = np.cumsum(tm, axis=1)
+    cum_tm[:, -1] = 1.0
+
+    total_transports = 0.0  # float to accumulate weighted crossings
+
+    for _ in range(n_trajectories):
+        state = int(np.random.choice(n_states, p=stat_dist))
+        last_side   = None   # None, 0 (bottom), or 1 (top)
+        last_weight = 0.0    # soft weight of the last committed state
+
+        for _ in range(traj_length):
+            w_b = bottom_w[state]
+            w_t = top_w[state]
+
+            # Assign to whichever side has higher weight; skip if both are 0
+            if w_b > w_t and w_b > 0.0:
+                current_side   = 0
+                current_weight = w_b
+            elif w_t > w_b and w_t > 0.0:
+                current_side   = 1
+                current_weight = w_t
+            else:
+                current_side = None   # "in-channel"
+
+            if current_side is not None:
+                if last_side is None:
+                    last_side   = current_side    # initialise
+                    last_weight = current_weight
+                elif last_side != current_side:
+                    # Weighted crossing: product of departure and arrival weights
+                    total_transports += last_weight * current_weight
+                    last_side   = current_side
+                    last_weight = current_weight
+
+            # Advance one Markov step
+            state = int(np.searchsorted(cum_tm[state], np.random.random()))
+
+    total_time_s     = n_trajectories * traj_length * lagtime_s
+    concentration_M  = amount_to_concentration(1, box_side_a=800)
+    concentration_uM = concentration_M * 1e6
+
+    rate = total_transports / total_time_s
+    return rate / concentration_uM
+
+
+def get_top_bottom_states(clustering, state_choice_method, distance_state_threshold_nm,
+                          clustered=None, soft_scale_nm=None):
+    """Return (bottom, top) state descriptors.
+
+    For hard-threshold methods ("prominent", "nuc_cyt_treshold", or "distance" with
+    soft_scale_nm=None) the return values are integer index arrays.
+
+    For the "distance" method with soft_scale_nm set, the return values are float
+    numpy arrays of shape (n_states,) with values in [0, 1] representing the sigmoid
+    soft-assignment weight of each state to the bottom / top committed sets:
+
+        w_bottom[i] = sigmoid( -(mu_z[i] + threshold) / soft_scale_nm )
+        w_top[i]    = sigmoid(  (mu_z[i] - threshold) / soft_scale_nm )
+
+    The weight is 0.5 exactly at the threshold distance and approaches 1 well beyond it.
+    soft_scale_nm controls how quickly the weight falls off: smaller values give a
+    sharper transition, larger values give a more gradual one.
+    """
     bottom_indices = []
     top_indices = []
     if state_choice_method == "prominent":
@@ -377,8 +516,13 @@ def get_top_bottom_states(clustering, state_choice_method, distance_state_thresh
         anchor_coordinates = get_sorted_anchor_coordinates_np()[1]
         coordinate_edges = calc_coordinate_edges_dict(anchor_coordinates)
         mus, covs = estimate_cluters_mu_cov(2000, clustering.centroids, coordinate_edges, range(clustering.centroids.shape[0]))
-        bottom_indices = np.where(mus[:, 1] <= -distance_state_threshold_nm)[0]
-        top_indices = np.where(mus[:, 1] >= distance_state_threshold_nm)[0]
+        if soft_scale_nm is not None:
+            # Soft sigmoid weights — w = 0.5 at the threshold, → 1 well beyond it.
+            bottom_indices = 1.0 / (1.0 + np.exp( (mus[:, 1] + distance_state_threshold_nm) / soft_scale_nm))
+            top_indices    = 1.0 / (1.0 + np.exp(-(mus[:, 1] - distance_state_threshold_nm) / soft_scale_nm))
+        else:
+            bottom_indices = np.where(mus[:, 1] <= -distance_state_threshold_nm)[0]
+            top_indices = np.where(mus[:, 1] >= distance_state_threshold_nm)[0]
     elif state_choice_method == "nuc_cyt_treshold":
         bottom_indices = np.where(clustering.centroids[:,0] > distance_state_threshold_nm)[0]
         top_indices = np.where(clustering.centroids[:,-1] > distance_state_threshold_nm)[0]
@@ -406,12 +550,14 @@ def _stage_07_computePermeabilities_bootstrap(params):
         bottom_indices, top_indices = get_top_bottom_states(clustering=clustering,
                                                     state_choice_method=params['STATE_CHOICE_METHOD'],
                                                     distance_state_threshold_nm=params['DISTANCE_STATE_THRESHOLD_NM'],
-                                                    clustered=clustered)    
+                                                    clustered=clustered,
+                                                    soft_scale_nm=params.get('SOFT_SCALE_NM'))    
         permeabilities = {}
         for b in range(params['BOOTSTRAP_REPEATS']):
             with open(_cp(params, "6_transition_matrices_bootstrap", f"{n_clusters}clusters_bootstrap{b+1}.pickle"), "rb") as f:
                 tm = pickle.load(f)
-            perm = mm_permiability(tm, bottom_states=bottom_indices, top_states=top_indices)
+            # perm = mm_permiability(tm, bottom_states=bottom_indices, top_states=top_indices)
+            perm = mm_permeability_trajectory(tm, bottom_states=bottom_indices, top_states=top_indices, lagtime_s=(1e-9 * params['LOAD_MD_STEP_NS'] * params['WINDOW_SIZE_STEPS']))
             permeabilities_bootstrap[b][n_clusters] = perm
             if b == 0:
                 print(f"Bootstrap {b+1} Permeability for {n_clusters} clusters: {perm} (units: n_events / s / uM / NPC)")
@@ -430,8 +576,10 @@ def _stage_07_computePermeabilities_normal(params):
         bottom_indices, top_indices = get_top_bottom_states(clustering=clustering,
                                                                 state_choice_method=params['STATE_CHOICE_METHOD'],
                                                                 distance_state_threshold_nm=params['DISTANCE_STATE_THRESHOLD_NM'],
-                                                                clustered=clustered)
-        perm = mm_permiability(tm, bottom_states=bottom_indices, top_states=top_indices)
+                                                                clustered=clustered,
+                                                                soft_scale_nm=params.get('SOFT_SCALE_NM'))
+        # perm = mm_permiability(tm, bottom_states=bottom_indices, top_states=top_indices)
+        perm = mm_permeability_trajectory(tm, bottom_states=bottom_indices, top_states=top_indices, lagtime_s=(1e-9 * params['LOAD_MD_STEP_NS'] * params['WINDOW_SIZE_STEPS']))
         permeabilities[n_clusters] = perm
         print(f"Permeability for {n_clusters} clusters: {perm} (units: n_events / s / uM / NPC)")
     with open(_cp(params, "7_permeabilities.pickle"), "wb") as f:
@@ -452,8 +600,9 @@ def _stage_07_computePermeabilities_subset(params):
         bottom_indices, top_indices = get_top_bottom_states(clustering=clustering,
                                                                 state_choice_method=params['STATE_CHOICE_METHOD'],
                                                                 distance_state_threshold_nm=params['DISTANCE_STATE_THRESHOLD_NM'],
-                                                                clustered=clustered)
-        perm = mm_permiability(tm, bottom_states=bottom_indices, top_states=top_indices)
+                                                                clustered=clustered,
+                                                                soft_scale_nm=params.get('SOFT_SCALE_NM'))
+        perm = mm_permeability_trajectory(tm, bottom_states=bottom_indices, top_states=top_indices, lagtime_s=(1e-9 * params['LOAD_MD_STEP_NS'] * params['WINDOW_SIZE_STEPS']))
         permeabilities[n_clusters] = perm
         print(f"Permeability for {n_clusters} clusters: {perm} (units: n_events / s / uM / NPC)")
     with open(out_dir / "7_permeabilities.pickle", "wb") as f:
