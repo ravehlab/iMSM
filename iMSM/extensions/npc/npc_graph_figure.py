@@ -452,11 +452,9 @@ def visualize_gpcca(n_macrostates, ax, mus, macrostate_assignments, viz_gpcca=Tr
 #     gpcca.optimize(n_macrostates)
 #     return gpcca
 
-def visualize_arrows_between_mesostates(P, fig, ax, good_cluster_indices, mus, show_colorbar_title=True, in_out_flow=None, show_colorbar=True):
-    Q = infinitesimal_generator(P, dt=1) # rate at 1 / us
+def visualize_arrows_between_mesostates(P, fig, ax, good_cluster_indices, mus, show_colorbar_title=True, in_out_flow=None, show_colorbar=True, min_rate=0.01, max_rate=0.5, time_step_us=1):
+    Q = infinitesimal_generator(P, dt=time_step_us) # rate at 1 / us
     avgs = np.zeros_like(P)
-    min_rate = 0.01
-    max_rate = 0.5    
     # min_transition_probability = 0.01
     # max_transition_probability = 0.05
     # transitions_vmin, transitions_vmax = np.min(P), np.max(P)
@@ -499,15 +497,21 @@ def visualize_arrows_between_mesostates(P, fig, ax, good_cluster_indices, mus, s
                 color = transitions_cmap(transitions_norm(np.log10(rate)))
                 ax.plot([mu_i[0], mu_j[0]], [mu_i[1], mu_j[1]], color=color, alpha=0.8, linewidth=2, zorder=-999)
     # Add transition colorbar
+# Add transition colorbar
     if show_colorbar:
+        # Create a ScalarMappable to link the cmap and norm to the colorbar
         sm = plt.cm.ScalarMappable(cmap=transitions_cmap, norm=transitions_norm)
-        sm.set_array([])
-        cbar = fig.colorbar(sm, cax=ax.inset_axes([0.8, 0.1, 0.02, 0.8]))
+        sm.set_array([]) # Required in some versions of matplotlib to avoid errors
+        
+        # Add the colorbar, linking it to the specific 'ax'
+        # 'fraction' and 'pad' help keep it properly scaled next to the plot
+        cbar = fig.colorbar(sm, ax=ax, fraction=0.046, pad=0.04)
+        
         # cbar.ax.set_title(r'$\frac{P[i,j] + P[j,i]}{2}$', fontsize=14)
         if show_colorbar_title:
             cbar.ax.set_title(r'Transition Rate $\log_{10} (\frac{1}{\mu s})$', fontsize=14)
 
-def visualize_pie_mesostates(clusters, P, ax2, good_cluster_indices, mus, pie_colors, alpha = 0.8, add_nucleus_cytoplasm_text=True, pie_scaling = 15):
+def visualize_pie_mesostates(clusters, P, ax2, good_cluster_indices, mus, pie_colors, alpha = 0.8, add_nucleus_cytoplasm_text=True, pie_scaling = 15, dots_only=False):
     # stationary_dist = stationary_distribution(P)
     stationary_dist = np.power(stationary_distribution(P), 1/3)  # Adjusted for better visualization
     radii = stationary_dist[good_cluster_indices] * pie_scaling # scale for visibility
@@ -529,6 +533,11 @@ def visualize_pie_mesostates(clusters, P, ax2, good_cluster_indices, mus, pie_co
             if add_nucleus_cytoplasm_text:
                 ax2.text(mus[i][0], mus[i][1] + rect_height / 2 if rads[-1] > 0.99 else mus[i][1] - rect_height / 2, 'Nucleus' if rads[0] > 0.99 else 'Cytoplasm', fontsize=24, color="#515151", ha='center', va='center', fontweight='bold', zorder = 9999)
             continue
+        
+        if dots_only:
+            ax2.scatter(mus[i][0], mus[i][1], color='black', s=50, zorder=1000)
+            continue
+            
         theta_start = 0.0
         paired = sorted(zip(rads, pie_colors, list(range(len(rads)))), reverse=True)
         rads_sorted, pie_colors_sorted, indexes_sorted = map(list, zip(*paired))
@@ -580,6 +589,18 @@ def estimate_cluters_mu_cov(n_samples, clusters, coordinate_edges, good_cluster_
         cov = np.cov(spatial_coordinates, rowvar=False)
         covs.append(cov)
     return np.array(mus), np.array(covs)
+
+def estimate_clusters_mu_2(clusters_3d_locations, good_cluster_indices):
+    """
+    Estimates the mus via the actual locations of the relevant kaps. 
+    clusters_3d_locations: 3d locations of the clusters 
+    good_cluster_indices: indices of the clusters we want to visualize, i.e. those that are mostly in the nucleus, cytoplasm, or channel
+    """
+    mus = []
+    for cluster_i in good_cluster_indices:
+        mus.append(clusters_3d_locations[cluster_i][[1, 2]])
+    return np.array(mus)
+    
 
 def estimate_unprojected_mus(n_samples, clusters, coordinate_edges, good_cluster_indices):
     mus = []
@@ -712,7 +733,7 @@ def add_npc_scaffold_picture(ax):
     img = mpimg.imread('data/volume_flat_90x90_0364level.png')
     ax.imshow(img, extent=[-45, 45, -45, 45], zorder=-1000, aspect='auto', alpha=0.1)
     
-def hide_axii_and_show_scale_bar(ax, show_scale_bar=True):
+def hide_axii_and_show_scale_bar(ax, show_scale_bar=True, show_scale_text=True):
     ax.set_xticks([])
     ax.set_yticks([])
     ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
@@ -728,15 +749,16 @@ def hide_axii_and_show_scale_bar(ax, show_scale_bar=True):
             linewidth=2,
             zorder=10,
         )
-        ax.text(
-            scale_bar_start[0] + scale_bar_length / 2,
-            scale_bar_start[1] - 3,
-            r'$100\,\mathrm{\AA}$',
-            ha='center',
-            va='top',
-            fontsize=14,
-            zorder=10,
-        )
+        if show_scale_text:
+            ax.text(
+                scale_bar_start[0] + scale_bar_length / 2,
+                scale_bar_start[1] - 3,
+                r'$100\,\mathrm{\AA}$',
+                ha='center',
+                va='top',
+                fontsize=14,
+                zorder=10,
+            )
 
 PIE_COLORS_DICT = {'nuc': "#dddddd", # old = "#aeccdb"
                    'nuc_channel': "#20c9df",
@@ -850,15 +872,124 @@ def pick_good_clusters_by_mu_angle(mus, clusters, angle_threshold_degrees=90, an
             good_cluster_indices.append(cluster_i)
     return good_cluster_indices
 
-def comparison_plot(base_tm_path, base_cluster_path, radii, n_sites, title, in_out_flow=None, ignored_nup_types=None, add_mini_titles=False, pie_scaling=15):
+def visualize_vector_field_mesostates(P, fig, ax, good_cluster_indices, mus, show_colorbar_title=True, in_out_flow=None, show_colorbar=True, min_rate=0.01, max_rate=0.5, arrow_scale=5):
+    Q = infinitesimal_generator(P, dt=1) # rate at 1 / us
+    
+    transitions_cmap = plt.cm.Greys 
+    transitions_norm = plt.Normalize(vmin=np.log10(min_rate), vmax=np.log10(max_rate))
+    
+    if in_out_flow not in [None, "in", "out"]:
+        raise ValueError("in_out_flow must be None, 'in', or 'out'")
+    
+    # 1. Draw the macroscopic layout arrows (Kept exactly as you had them)
+    if in_out_flow == "in":
+        ax.arrow(-25, -20, 0, 15, head_width=1, head_length=2, fc='black', ec='black', linewidth=2, zorder=1000)
+        ax.arrow(-25, 20, 0, -15, head_width=1, head_length=2, fc='black', ec='black', linewidth=2, zorder=1000)
+    if in_out_flow == "out":
+        ax.arrow(-25, -5, 0, -15, head_width=1, head_length=2, fc='black', ec='black', linewidth=2, zorder=1000)
+        ax.arrow(-25, 5, 0, 15, head_width=1, head_length=2, fc='black', ec='black', linewidth=2, zorder=1000)
+
+    # 2. Prepare lists for the vector field (Quiver Plot)
+    X, Y, U, V, magnitudes = [], [], [], [], []
+    
+    for i_idx in range(len(good_cluster_indices)):
+        cluster_i = good_cluster_indices[i_idx]
+        mu_i = mus[i_idx]
+        
+        vx, vy = 0.0, 0.0
+        
+        for j_idx in range(len(good_cluster_indices)):
+            if i_idx == j_idx:
+                continue
+                
+            cluster_j = good_cluster_indices[j_idx]
+            mu_j = mus[j_idx]
+            
+            # Calculate the direction (unit vector) from i to j
+            dx = mu_j[0] - mu_i[0]
+            dy = mu_j[1] - mu_i[1]
+            dist = np.sqrt(dx**2 + dy**2)
+            
+            if dist == 0:
+                continue
+                
+            ux, uy = dx / dist, dy / dist
+            rate = 0.0
+            
+            # Determine the appropriate rate based on flow condition
+            if in_out_flow is None:
+                # Use NET flow from i to j to find the dominant direction
+                net_rate = Q[cluster_i, cluster_j] - Q[cluster_j, cluster_i]
+                if net_rate > 0: 
+                    rate = net_rate
+            else:
+                center_z = 0
+                i_dist = np.abs(mu_i[1] - center_z)
+                j_dist = np.abs(mu_j[1] - center_z)
+                
+                # Filter for inward or outward flow relative to center_z
+                if in_out_flow == "in" and j_dist < i_dist: 
+                    rate = Q[cluster_i, cluster_j]
+                elif in_out_flow == "out" and j_dist > i_dist: 
+                    rate = Q[cluster_i, cluster_j]
+            
+            # Accumulate the vector components
+            vx += rate * ux
+            vy += rate * uy
+            
+        # Calculate final net magnitude for this mesostate
+        mag = np.sqrt(vx**2 + vy**2)
+        
+        # Only plot arrows for states with significant net flow
+        if mag > min_rate:
+            X.append(mu_i[0])
+            Y.append(mu_i[1])
+            U.append(vx)
+            V.append(vy)
+            magnitudes.append(mag)
+            
+    # 3. Draw the Vector Field
+    if len(X) > 0:
+        # Convert lists to numpy arrays for element-wise division
+        U_arr = np.array(U)
+        V_arr = np.array(V)
+        mags_arr = np.array(magnitudes)
+        
+        # Normalize the vectors so all arrows have a length of 1
+        U_normalized = U_arr / mags_arr
+        V_normalized = V_arr / mags_arr
+        
+        # Clip magnitudes so they map cleanly to your colormap norm without throwing log warnings
+        clipped_mags = np.clip(mags_arr, min_rate, max_rate)
+        colors = np.log10(clipped_mags)
+        
+        U_final = U_normalized * arrow_scale
+        V_final = V_normalized * arrow_scale
+        ax.quiver(X, Y, U_normalized * arrow_scale, V_normalized * arrow_scale, colors, cmap=transitions_cmap, norm=transitions_norm, 
+                  pivot='tail', scale=25, width=0.005, alpha=0.9, zorder=-999)
+
+    # 4. Add transition colorbar
+    if show_colorbar:
+        sm = plt.cm.ScalarMappable(cmap=transitions_cmap, norm=transitions_norm)
+        sm.set_array([]) 
+        
+        cbar = fig.colorbar(sm, ax=ax, fraction=0.046, pad=0.04)
+        
+        if show_colorbar_title:
+            cbar.ax.set_title(r'Net Rate $\log_{10} (\frac{1}{\mu s})$', fontsize=14)
+
+def comparison_plot(base_tm_path, base_cluster_path, radii, n_sites, title, in_out_flow=None, ignored_nup_types=None, add_mini_titles=False, pie_scaling=15, min_rate=0.01, max_rate=5, time_step_us=5, show_scale_bars=True, swap_axes=False, use_actual_mus_path=None, dots_only=False):
     n_samples = 2000
-    fig_x = len(n_sites)
-    fig_y = len(radii)
+    
+    # 1. Determine figure grid dimensions based on the swap_axes argument
+    if swap_axes:
+        fig_x = len(radii)
+        fig_y = len(n_sites)
+    else:
+        fig_x = len(n_sites)
+        fig_y = len(radii)
     
     # --- FIX 1: Adjust Figure Dimensions to Match Data Aspect Ratio ---
-    # X range is 60 (-30 to 30), Y range is 80 (-40 to 40).
-    # To get a 1:1 unit ratio without whitespace, the plot height must be 
-    # ~1.33x the width (80/60).
     plot_width = 10
     plot_height = plot_width * (80 / 60)  # approx 13.33
     
@@ -879,21 +1010,31 @@ def comparison_plot(base_tm_path, base_cluster_path, radii, n_sites, title, in_o
                 if color_to_remove in pie_colors:
                     pie_colors.remove(color_to_remove)
 
-
-    for j, r in enumerate(reversed(radii)):
+    for j_r, r in enumerate(radii):
         print("kda: ", radius_a_to_kda(r))
-        for i, n in enumerate(n_sites):
+        for i_n, n in enumerate(n_sites):
+            
+            # 2. Determine the correct row and column index for the current plot
+            if swap_axes:
+                row_idx = i_n
+                col_idx = j_r
+            else:
+                row_idx = j_r
+                col_idx = i_n
+                
+            ax = axes[row_idx, col_idx]
+            
             if add_mini_titles:
-                axes[j, i].set_title(f'Radius: {r} nm, n_sites: {n}', fontsize=14)
+                ax.set_title(f'Radius: {r} nm, n_sites: {n}', fontsize=14)
             # set range of axes
-            axes[j, i].set_xlim(-30, 30)
-            axes[j, i].set_ylim(-40, 40)
+            ax.set_xlim(-30, 30)
+            ax.set_ylim(-40, 40)
             
             # This ensures 1 unit on x = 1 unit on y (isometric)
-            axes[j, i].set_aspect('equal')
+            ax.set_aspect('equal')
             
             # hide axii and show scale bar
-            hide_axii_and_show_scale_bar(axes[j, i], show_scale_bar=False)
+            hide_axii_and_show_scale_bar(ax, show_scale_bar=show_scale_bars, show_scale_text=False)
             
             tm_path = base_tm_path.replace("#r#", str(r)).replace("#n#", str(n))
             cluster_path = base_cluster_path.replace("#r#", str(r)).replace("#n#", str(n))
@@ -907,11 +1048,18 @@ def comparison_plot(base_tm_path, base_cluster_path, radii, n_sites, title, in_o
             good_mesostate_indices = list(range(len(clusters)))
 
             unprojected_mus = estimate_unprojected_mus(n_samples, clusters, coordinate_edges, good_mesostate_indices)
-            good_mesostate_indices = pick_good_clusters_by_mu_angle(unprojected_mus, clusters, angle_threshold_degrees=90, angle_shift_degrees=0)
-            mus, covs = estimate_cluters_mu_cov(n_samples, clusters, coordinate_edges, good_mesostate_indices)
+            good_mesostate_indices = pick_good_clusters_by_mu_angle(unprojected_mus, clusters, angle_threshold_degrees=92, angle_shift_degrees=0)
+            if use_actual_mus_path is not None:
+                with open(use_actual_mus_path.replace("#r#", str(r)).replace("#n#", str(n)), "rb") as f:
+                    actual_mus = pickle.load(f)
+                mus = estimate_clusters_mu_2(actual_mus, good_mesostate_indices)
+            else:
+                mus, covs = estimate_cluters_mu_cov(n_samples, clusters, coordinate_edges, good_mesostate_indices)
+
             
-            visualize_arrows_between_mesostates(P, fig, axes[j, i], good_mesostate_indices, mus, show_colorbar_title=False, in_out_flow=in_out_flow, show_colorbar=False)
-            visualize_pie_mesostates(clusters, P, axes[j, i], good_mesostate_indices, mus, PIE_COLORS, add_nucleus_cytoplasm_text=True, pie_scaling=pie_scaling)
-            add_npc_scaffold_picture(axes[j, i])
+            # 3. Update colorbar logic to check the dynamic row/col index (top-right plot)
+            show_colorbar = (row_idx == 0 and col_idx == fig_x - 1)  
             
-    # Removed the 'big_ax' block (plot level axis arrows) entirely.
+            visualize_arrows_between_mesostates(P, fig, ax, good_mesostate_indices, mus, show_colorbar_title=False, in_out_flow=in_out_flow, show_colorbar=show_colorbar, min_rate=min_rate, max_rate=max_rate, time_step_us=time_step_us)
+            visualize_pie_mesostates(clusters, P, ax, good_mesostate_indices, mus, PIE_COLORS, add_nucleus_cytoplasm_text=True, pie_scaling=pie_scaling, dots_only=dots_only)
+            add_npc_scaffold_picture(ax)

@@ -65,23 +65,31 @@ class iMSMConfig:
     max_surface_dist_nm: float = 1.0
     split_nc: bool = True
     custom_fg_coords_path: Optional[str] = None # For sims w/ multiple kap types, to not redo loading of FGs
+    custom_kap_coords_path: Optional[str] = None # For consistency
     
     # --- Stage 4: Embedding ---
     window_size_steps: int = 10 # Window time is WINDOW_SIZE_STEPS * LOAD_MD_STEP_NS
+    custom_categorized_path: Optional[str] = None # To skip categorization stage if already done
     
     # --- Stage 5: Clustering ---
     clustering_type: str = "sym-faiss"
     n_clusters: List[int] = field(default_factory=lambda: [40, 80, 160, 320, 640, 1280])
+    prune_thresh: float = 0.95 # Threshold for merging heavy nucleoplasm/cytoplasm clusters in sym-kmeans clustering (between 0 and 1, lower means more aggressive merging)
+    save_cluster_3d_locations: bool = True # Whether to save 3D locations of clusters (for state choice by distance)
     
     # --- Stage 6: MSM ---
     tm_prior: float = 0
+    reversible_msm: bool = False # Use MaximumLikelihoodMSM if True, else BayesianMSM
     
     # --- Stage 7: Stats ---
+    use_pcca: bool = False # whether to perform PCCA to coarse-grain the transition matrix
+    pcca_macrostates: int = 5 # number of macrostates to coarse-grain to if use_pcca is True
     state_choice_method: str = "prominent" # options: "prominent", "distance"
     distance_state_threshold_nm: float = 10 # only used if STATE_CHOICE_METHOD is "distance"
-    # If set, uses a sigmoid soft-assignment around ±distance_state_threshold_nm instead of a
-    # hard threshold.  soft_scale_nm is the sigmoid scale parameter: weight → 0.5 at the
-    # threshold and → 0/1 at ±∞.  A value of ~2–5 nm is a reasonable starting point.
+    # If set, uses a linear-ramp soft-assignment around ±distance_state_threshold_nm instead
+    # of a hard threshold.  soft_scale_nm is the ramp width in nm: weight rises linearly
+    # from 0 at (threshold − soft_scale_nm) to 1 at threshold (and vice-versa for bottom).
+    # A value of ~5–20 nm is a reasonable starting point.
     # Set to None (default) to keep the original hard-threshold behaviour.
     soft_scale_nm: Optional[float] = None
     
@@ -222,10 +230,15 @@ def stage_03_categorize(params):
         if params['CUSTOM_FG_COORDS_PATH']
         else str(_cp(params, "2_single_sim_fg_coords")) + "/"
     )
+    kaps_path = (
+        params['CUSTOM_KAP_COORDS_PATH']
+        if params['CUSTOM_KAP_COORDS_PATH']
+        else str(_cp(params, "1_single_sim_kap_coords")) + "/"
+    )
     categorize_multiples(
         sim_indexes=params['LOAD_MD_SIMS_RANGE'],
         sim_times=[sim_time_str],
-        diffuser_coords_path_prefix=str(_cp(params, "1_single_sim_kap_coords")),
+        diffuser_coords_path_prefix=kaps_path,
         fg_coords_path_prefix=fgs_path,
         step=1,
         save_file_path=str(_cp(params, "3_categorized.pickle")),
@@ -238,9 +251,15 @@ def stage_03_categorize(params):
 def stage_04_embed(params):
     from iMSM.extensions.npc.npc_embed_cluster import load_embed_save
     
+    categorized_path = (
+        params['CUSTOM_CATEGORIZED_PATH']
+        if params['CUSTOM_CATEGORIZED_PATH']
+        else str(_cp(params, "3_categorized.pickle"))
+    )
+    
     load_embed_save(
     window_size=params['WINDOW_SIZE_STEPS'],
-    load_categorized_path=str(_cp(params, "3_categorized.pickle")),
+    load_categorized_path=categorized_path,
     save_embedded_path=str(_cp(params, "4_embedded.pickle")),
     save_embedded_eighth_path=None,
     split_nc="nmc"
@@ -259,6 +278,7 @@ def _stage_5_cluster_subset(params):
     subset = _subset_folder(params)
     _ensure_dir(_cp(params, "5_clustering_subsets", subset))
     _ensure_dir(_cp(params, "5_clustered_subsets", subset))
+    _, _, sim_time_str = _time_range_strings(params)
     load_reduce_cluster_save(
         pca_components=220,
         n_clusters=params['N_CLUSTERS'],
@@ -269,13 +289,20 @@ def _stage_5_cluster_subset(params):
         data_subset=params['DATA_SUBSET'],
         data_subset_index=params['DATA_SUBSET_INDEX'],
         data_subset_mode=params['DATA_SUBSET_MODE'],
-        n_sims=len(params['LOAD_MD_SIMS_RANGE'])
+        n_sims=len(params['LOAD_MD_SIMS_RANGE']),
+        kap_coords_dir=str(_cp(params, "1_single_sim_kap_coords")),
+        sim_indexes=params['LOAD_MD_SIMS_RANGE'],
+        sim_time_str=sim_time_str,
+        window_size=params['WINDOW_SIZE_STEPS'],
+        prune_thresh=params['PRUNE_THRESH'],
+        save_cluster_3d_locations=params['SAVE_CLUSTER_3D_LOCATIONS']
         )
 
 def _stage_5_cluster_normal(params):
     from iMSM.extensions.npc.npc_embed_cluster import load_reduce_cluster_save
     _ensure_dir(_cp(params, "5_clustering"))
     _ensure_dir(_cp(params, "5_clustered"))
+    _, _, sim_time_str = _time_range_strings(params)
     load_reduce_cluster_save(
         pca_components=220,
         n_clusters=params['N_CLUSTERS'],
@@ -283,6 +310,12 @@ def _stage_5_cluster_normal(params):
         save_pca_cluster_path=str(_cp(params, "5_clustering", "#c#clusters.pickle")),
         save_clustered_path=str(_cp(params, "5_clustered", "#c#clusters.pickle")),
         verbose=False,
+        kap_coords_dir=str(_cp(params, "1_single_sim_kap_coords")),
+        sim_indexes=params['LOAD_MD_SIMS_RANGE'],
+        sim_time_str=sim_time_str,
+        window_size=params['WINDOW_SIZE_STEPS'],
+        prune_thresh=params['PRUNE_THRESH'],
+        save_cluster_3d_locations=params['SAVE_CLUSTER_3D_LOCATIONS']
         )
 
 def stage_06_buildMSM(params):
@@ -312,14 +345,14 @@ def _stage_06_buildMSM_subset(params):
             actual_n_clusters = clustering.centroids.shape[0]
         with open(_cp(params, "5_clustered_subsets", subset, f"{n_clusters}clusters.pickle"), "rb") as f:
             clustered_data = pickle.load(f)
-        transition_matrix = generate_transition_matrix(clustered_data[:, :], actual_n_clusters, prior=params['TM_PRIOR'])
+        transition_matrix = generate_transition_matrix(clustered_data[:, :], actual_n_clusters, prior=params['TM_PRIOR'], reversible=params.get('REVERSIBLE_MSM', False))
         with open(out_dir / f"{n_clusters}clusters.pickle", "wb") as f:
             pickle.dump(transition_matrix, f)
 
 def _stage_06_buildMSM_normal(params, n_clusters, actual_n_clusters, clustered_data):
     from iMSM.extensions.npc.npc_msm import generate_transition_matrix
     out_dir = _ensure_dir(_cp(params, "6_transition_matrices"))
-    transition_matrix = generate_transition_matrix(clustered_data[:, :], actual_n_clusters, prior=params['TM_PRIOR'])
+    transition_matrix = generate_transition_matrix(clustered_data[:, :], actual_n_clusters, prior=params['TM_PRIOR'], reversible=params.get('REVERSIBLE_MSM', False))
     with open(out_dir / f"{n_clusters}clusters.pickle", "wb") as f:
         pickle.dump(transition_matrix, f)
 
@@ -337,34 +370,34 @@ def _stage_06_buildMSM_bootstrap(params, n_clusters, actual_n_clusters, clustere
             sample = np.concatenate([clustered_data[bottom_range + i*n_trajs_per_sim:bottom_range + (i+1)*n_trajs_per_sim, :] for i in resampled_indices], axis=0)
             resampled_clustered.append(sample)
         resampled_clustered = np.concatenate(resampled_clustered, axis=0)
-        transition_matrix = generate_transition_matrix(resampled_clustered[:, :], actual_n_clusters, prior=params['TM_PRIOR'])
+        transition_matrix = generate_transition_matrix(resampled_clustered[:, :], actual_n_clusters, prior=params['TM_PRIOR'], reversible=params.get('REVERSIBLE_MSM', False))
         with open(out_dir / f"{n_clusters}clusters_bootstrap{b+1}.pickle", "wb") as f:
             pickle.dump(transition_matrix, f)
     
     
-def mm_permiability(tm, bottom_states=None, top_states=None):
-    from iMSM.extensions.npc.npc_utils import amount_to_concentration, markov_rate_flux, markov_rate_manual
+# def mm_permiability(tm, bottom_states=None, top_states=None):
+#     from iMSM.extensions.npc.npc_utils import amount_to_concentration, markov_rate_flux, markov_rate_manual
 
-    lagtime = 1e-6 # in seconds
-    try:
-        rate_1 = markov_rate_flux(tm, start_states=bottom_states, target_states=top_states) # units: 1/lagtime (probably 1000ns)
-        rate_2 = markov_rate_flux(tm, start_states=top_states, target_states=bottom_states) # units: 1/lagtime (probably 1000ns)
-    except ValueError as e:
-        print(f"Error calculating rates: {e}")
-        return 0
-    rate_s = (1/lagtime) * (rate_1 + rate_2) # units: 1/s
+#     lagtime = 1e-6 # in seconds
+#     try:
+#         rate_1 = markov_rate_flux(tm, start_states=bottom_states, target_states=top_states) # units: 1/lagtime (probably 1000ns)
+#         rate_2 = markov_rate_flux(tm, start_states=top_states, target_states=bottom_states) # units: 1/lagtime (probably 1000ns)
+#     except ValueError as e:
+#         print(f"Error calculating rates: {e}")
+#         return 0
+#     rate_s = (1/lagtime) * (rate_1 + rate_2) # units: 1/s
 
-    concentration_M = amount_to_concentration(1, box_side_a=800) # single molecule
-    concentration_uM = concentration_M * 1e6
-    # print(concentration_uM)
+#     concentration_M = amount_to_concentration(1, box_side_a=800) # single molecule
+#     concentration_uM = concentration_M * 1e6
+#     # print(concentration_uM)
     
-    # units : n_events / s / uM / NPC 
-    perm = rate_s / concentration_uM
+#     # units : n_events / s / uM / NPC 
+#     perm = rate_s / concentration_uM
     
-    return perm
+#     return perm
 
 def mm_permeability_trajectory(tm, bottom_states, top_states,
-                               n_trajectories=1000, traj_length=1000,
+                               n_trajectories=3000, traj_length=1000,
                                lagtime_s=1e-6):
     """
     Permeability estimate via Markov chain trajectory simulation.
@@ -449,11 +482,15 @@ def mm_permeability_trajectory(tm, bottom_states, top_states,
             w_b = bottom_w[state]
             w_t = top_w[state]
 
-            # Assign to whichever side has higher weight; skip if both are 0
-            if w_b > w_t and w_b > 0.0:
+            # Assign to whichever side has higher weight, but only if that
+            # weight exceeds 0.5 — the natural boundary cutoff.
+            # For soft assignment: sigmoid > 0.5 iff the state is beyond the
+            # threshold distance, independent of soft_scale_nm.
+            # For hard assignment: weights are 0 or 1, so > 0.5 ≡ == 1.0.
+            if w_b > w_t and w_b > 0.5:
                 current_side   = 0
                 current_weight = w_b
-            elif w_t > w_b and w_t > 0.0:
+            elif w_t > w_b and w_t > 0.5:
                 current_side   = 1
                 current_weight = w_t
             else:
@@ -468,6 +505,11 @@ def mm_permeability_trajectory(tm, bottom_states, top_states,
                     total_transports += last_weight * current_weight
                     last_side   = current_side
                     last_weight = current_weight
+                else:
+                    # Same side re-entry: update departure weight to the most
+                    # recent committed state (physically, this is the last
+                    # position before the actual crossing attempt).
+                    last_weight = current_weight
 
             # Advance one Markov step
             state = int(np.searchsorted(cum_tm[state], np.random.random()))
@@ -481,22 +523,21 @@ def mm_permeability_trajectory(tm, bottom_states, top_states,
 
 
 def get_top_bottom_states(clustering, state_choice_method, distance_state_threshold_nm,
-                          clustered=None, soft_scale_nm=None):
+                          clustered=None, soft_scale_nm=None, clusters_3d_locations=None):
     """Return (bottom, top) state descriptors.
 
     For hard-threshold methods ("prominent", "nuc_cyt_treshold", or "distance" with
     soft_scale_nm=None) the return values are integer index arrays.
 
     For the "distance" method with soft_scale_nm set, the return values are float
-    numpy arrays of shape (n_states,) with values in [0, 1] representing the sigmoid
-    soft-assignment weight of each state to the bottom / top committed sets:
+    numpy arrays of shape (n_states,) with values in [0, 1] representing linear-ramp
+    soft-assignment weights for each state:
 
-        w_bottom[i] = sigmoid( -(mu_z[i] + threshold) / soft_scale_nm )
-        w_top[i]    = sigmoid(  (mu_z[i] - threshold) / soft_scale_nm )
+        w_top[i]    = clip( (mu_z[i]  − (threshold − soft_scale_nm)) / soft_scale_nm, 0, 1 )
+        w_bottom[i] = clip( (−mu_z[i] − (threshold − soft_scale_nm)) / soft_scale_nm, 0, 1 )
 
-    The weight is 0.5 exactly at the threshold distance and approaches 1 well beyond it.
-    soft_scale_nm controls how quickly the weight falls off: smaller values give a
-    sharper transition, larger values give a more gradual one.
+    Weight is 0 at (threshold − soft_scale_nm) and reaches 1 at threshold; states beyond
+    the threshold are clamped to 1.  soft_scale_nm is the ramp width in nm.
     """
     bottom_indices = []
     top_indices = []
@@ -511,15 +552,18 @@ def get_top_bottom_states(clustering, state_choice_method, distance_state_thresh
         bottom_indices.append(most_prominent[0])
         top_indices.append(most_prominent[1])
     elif state_choice_method == "distance":
-        from iMSM.extensions.npc.npc_graph_figure import estimate_cluters_mu_cov, calc_coordinate_edges_dict
+        from iMSM.extensions.npc.npc_graph_figure import estimate_cluters_mu_cov, calc_coordinate_edges_dict, estimate_clusters_mu_2
         from iMSM.extensions.npc.npc_utils import get_sorted_anchor_coordinates_np
         anchor_coordinates = get_sorted_anchor_coordinates_np()[1]
         coordinate_edges = calc_coordinate_edges_dict(anchor_coordinates)
         mus, covs = estimate_cluters_mu_cov(2000, clustering.centroids, coordinate_edges, range(clustering.centroids.shape[0]))
+        # mus = estimate_clusters_mu_2(clusters_3d_locations, range(clustering.centroids.shape[0]))
         if soft_scale_nm is not None:
-            # Soft sigmoid weights — w = 0.5 at the threshold, → 1 well beyond it.
-            bottom_indices = 1.0 / (1.0 + np.exp( (mus[:, 1] + distance_state_threshold_nm) / soft_scale_nm))
-            top_indices    = 1.0 / (1.0 + np.exp(-(mus[:, 1] - distance_state_threshold_nm) / soft_scale_nm))
+            # Linear-ramp weights: 0 at (threshold − soft_scale_nm), 1 at threshold.
+            top_indices    = np.clip((mus[:, 1]  - (distance_state_threshold_nm - soft_scale_nm)) / soft_scale_nm, 0.0, 1.0)
+            bottom_indices = np.clip((-mus[:, 1] - (distance_state_threshold_nm - soft_scale_nm)) / soft_scale_nm, 0.0, 1.0)
+            # print(f"Linear-ramp weights (bottom): {bottom_indices}")
+            # print(f"Linear-ramp weights (top): {top_indices}")
         else:
             bottom_indices = np.where(mus[:, 1] <= -distance_state_threshold_nm)[0]
             top_indices = np.where(mus[:, 1] >= distance_state_threshold_nm)[0]
@@ -547,15 +591,43 @@ def _stage_07_computePermeabilities_bootstrap(params):
             clustered = pickle.load(f)
         with open(_cp(params, "5_clustering", f"{n_clusters}clusters.pickle"), "rb") as f:
             clustering = pickle.load(f)
-        bottom_indices, top_indices = get_top_bottom_states(clustering=clustering,
-                                                    state_choice_method=params['STATE_CHOICE_METHOD'],
-                                                    distance_state_threshold_nm=params['DISTANCE_STATE_THRESHOLD_NM'],
-                                                    clustered=clustered,
-                                                    soft_scale_nm=params.get('SOFT_SCALE_NM'))    
+        with open(_cp(params, "5_clustering", f"{n_clusters}clusters_3d_locations.pickle"), "rb") as f:
+            clusters_3d_locations = pickle.load(f)
+        if not params.get('USE_PCCA', False):
+            bottom_indices, top_indices = get_top_bottom_states(clustering=clustering,
+                                                        state_choice_method=params['STATE_CHOICE_METHOD'],
+                                                        distance_state_threshold_nm=params['DISTANCE_STATE_THRESHOLD_NM'],
+                                                        clustered=clustered,
+                                                        soft_scale_nm=params.get('SOFT_SCALE_NM'),
+                                                        clusters_3d_locations=clusters_3d_locations)    
         permeabilities = {}
         for b in range(params['BOOTSTRAP_REPEATS']):
             with open(_cp(params, "6_transition_matrices_bootstrap", f"{n_clusters}clusters_bootstrap{b+1}.pickle"), "rb") as f:
                 tm = pickle.load(f)
+            
+            if params.get('USE_PCCA', False):
+                import deeptime
+                model = deeptime.markov.msm.MarkovStateModel(tm)
+                pcca = model.pcca(params.get('PCCA_MACROSTATES', 5))
+                tm = pcca.coarse_grained_transition_matrix
+                memberships = pcca.memberships # shape: (n_microstates, n_macrostates)
+                
+                from iMSM.extensions.npc.npc_graph_figure import estimate_cluters_mu_cov, calc_coordinate_edges_dict
+                from iMSM.extensions.npc.npc_utils import get_sorted_anchor_coordinates_np
+                anchor_coordinates = get_sorted_anchor_coordinates_np()[1]
+                coordinate_edges = calc_coordinate_edges_dict(anchor_coordinates)
+                mus, _ = estimate_cluters_mu_cov(2000, clustering.centroids, coordinate_edges, range(clustering.centroids.shape[0]))
+                
+                macro_mus = (memberships.T @ mus) / memberships.sum(axis=0)[:, None]
+                if params.get('SOFT_SCALE_NM') is not None:
+                    soft_scale_nm = params['SOFT_SCALE_NM']
+                    distance_state_threshold_nm = params['DISTANCE_STATE_THRESHOLD_NM']
+                    top_indices    = np.clip((macro_mus[:, 1]  - (distance_state_threshold_nm - soft_scale_nm)) / soft_scale_nm, 0.0, 1.0)
+                    bottom_indices = np.clip((-macro_mus[:, 1] - (distance_state_threshold_nm - soft_scale_nm)) / soft_scale_nm, 0.0, 1.0)
+                else:
+                    bottom_indices = np.where(macro_mus[:, 1] <= -params['DISTANCE_STATE_THRESHOLD_NM'])[0]
+                    top_indices = np.where(macro_mus[:, 1] >= params['DISTANCE_STATE_THRESHOLD_NM'])[0]
+
             # perm = mm_permiability(tm, bottom_states=bottom_indices, top_states=top_indices)
             perm = mm_permeability_trajectory(tm, bottom_states=bottom_indices, top_states=top_indices, lagtime_s=(1e-9 * params['LOAD_MD_STEP_NS'] * params['WINDOW_SIZE_STEPS']))
             permeabilities_bootstrap[b][n_clusters] = perm
@@ -573,11 +645,39 @@ def _stage_07_computePermeabilities_normal(params):
             clustering = pickle.load(f)
         with open(_cp(params, "6_transition_matrices", f"{n_clusters}clusters.pickle"), "rb") as f:
             tm = pickle.load(f)
-        bottom_indices, top_indices = get_top_bottom_states(clustering=clustering,
+        with open(_cp(params, "5_clustering", f"{n_clusters}clusters_3d_locations.pickle"), "rb") as f:
+                clusters_3d_locations = pickle.load(f)
+        if params.get('USE_PCCA', False):
+            import deeptime
+            model = deeptime.markov.msm.MarkovStateModel(tm)
+            pcca = model.pcca(params.get('PCCA_MACROSTATES', 5))
+            tm = pcca.coarse_grained_transition_matrix
+            memberships = pcca.memberships # shape: (n_microstates, n_macrostates)
+            
+            from iMSM.extensions.npc.npc_graph_figure import estimate_cluters_mu_cov, calc_coordinate_edges_dict, estimate_clusters_mu_2
+            from iMSM.extensions.npc.npc_utils import get_sorted_anchor_coordinates_np
+            anchor_coordinates = get_sorted_anchor_coordinates_np()[1]
+            coordinate_edges = calc_coordinate_edges_dict(anchor_coordinates)
+            mus, _ = estimate_cluters_mu_cov(2000, clustering.centroids, coordinate_edges, range(clustering.centroids.shape[0]))
+            
+            # macro_mus = weighted average of micro_mus
+            macro_mus = (memberships.T @ mus) / memberships.sum(axis=0)[:, None]
+            
+            if params.get('SOFT_SCALE_NM') is not None:
+                soft_scale_nm = params['SOFT_SCALE_NM']
+                distance_state_threshold_nm = params['DISTANCE_STATE_THRESHOLD_NM']
+                top_indices    = np.clip((macro_mus[:, 1]  - (distance_state_threshold_nm - soft_scale_nm)) / soft_scale_nm, 0.0, 1.0)
+                bottom_indices = np.clip((-macro_mus[:, 1] - (distance_state_threshold_nm - soft_scale_nm)) / soft_scale_nm, 0.0, 1.0)
+            else:
+                bottom_indices = np.where(macro_mus[:, 1] <= -params['DISTANCE_STATE_THRESHOLD_NM'])[0]
+                top_indices = np.where(macro_mus[:, 1] >= params['DISTANCE_STATE_THRESHOLD_NM'])[0]
+        else:
+            bottom_indices, top_indices = get_top_bottom_states(clustering=clustering,
                                                                 state_choice_method=params['STATE_CHOICE_METHOD'],
                                                                 distance_state_threshold_nm=params['DISTANCE_STATE_THRESHOLD_NM'],
                                                                 clustered=clustered,
-                                                                soft_scale_nm=params.get('SOFT_SCALE_NM'))
+                                                                soft_scale_nm=params.get('SOFT_SCALE_NM'),
+                                                                clusters_3d_locations=clusters_3d_locations)
         # perm = mm_permiability(tm, bottom_states=bottom_indices, top_states=top_indices)
         perm = mm_permeability_trajectory(tm, bottom_states=bottom_indices, top_states=top_indices, lagtime_s=(1e-9 * params['LOAD_MD_STEP_NS'] * params['WINDOW_SIZE_STEPS']))
         permeabilities[n_clusters] = perm
@@ -597,13 +697,44 @@ def _stage_07_computePermeabilities_subset(params):
             clustering = pickle.load(f)
         with open(_cp(params, "6_transition_matrices_subsets", subset, f"{n_clusters}clusters.pickle"), "rb") as f:
             tm = pickle.load(f)
-        bottom_indices, top_indices = get_top_bottom_states(clustering=clustering,
-                                                                state_choice_method=params['STATE_CHOICE_METHOD'],
-                                                                distance_state_threshold_nm=params['DISTANCE_STATE_THRESHOLD_NM'],
-                                                                clustered=clustered,
-                                                                soft_scale_nm=params.get('SOFT_SCALE_NM'))
+        with open(_cp(params, "5_clustering_subsets", subset, f"{n_clusters}clusters_3d_locations.pickle"), "rb") as f:
+            clusters_3d_locations = pickle.load(f)
+        if params.get('USE_PCCA', False):
+            import deeptime
+            model = deeptime.markov.msm.MarkovStateModel(tm)
+            pcca = model.pcca(params.get('PCCA_MACROSTATES', 5))
+            tm = pcca.coarse_grained_transition_matrix
+            memberships = pcca.memberships # shape: (n_microstates, n_macrostates)
+            
+            from iMSM.extensions.npc.npc_graph_figure import estimate_cluters_mu_cov, calc_coordinate_edges_dict, estimate_clusters_mu_2
+            from iMSM.extensions.npc.npc_utils import get_sorted_anchor_coordinates_np
+            anchor_coordinates = get_sorted_anchor_coordinates_np()[1]
+            coordinate_edges = calc_coordinate_edges_dict(anchor_coordinates)
+            mus, _ = estimate_cluters_mu_cov(2000, clustering.centroids, coordinate_edges, range(clustering.centroids.shape[0]))
+            
+            # macro_mus = weighted average of micro_mus
+            macro_mus = (memberships.T @ mus) / memberships.sum(axis=0)[:, None]
+            
+            if params.get('SOFT_SCALE_NM') is not None:
+                soft_scale_nm = params['SOFT_SCALE_NM']
+                distance_state_threshold_nm = params['DISTANCE_STATE_THRESHOLD_NM']
+                top_indices    = np.clip((macro_mus[:, 1]  - (distance_state_threshold_nm - soft_scale_nm)) / soft_scale_nm, 0.0, 1.0)
+                bottom_indices = np.clip((-macro_mus[:, 1] - (distance_state_threshold_nm - soft_scale_nm)) / soft_scale_nm, 0.0, 1.0)
+            else:
+                bottom_indices = np.where(macro_mus[:, 1] <= -params['DISTANCE_STATE_THRESHOLD_NM'])[0]
+                top_indices = np.where(macro_mus[:, 1] >= params['DISTANCE_STATE_THRESHOLD_NM'])[0]
+        else:
+            bottom_indices, top_indices = get_top_bottom_states(clustering=clustering,
+                                                                    state_choice_method=params['STATE_CHOICE_METHOD'],
+                                                                    distance_state_threshold_nm=params['DISTANCE_STATE_THRESHOLD_NM'],
+                                                                    clustered=clustered,
+                                                                    soft_scale_nm=params.get('SOFT_SCALE_NM'),
+                                                                    clusters_3d_locations=clusters_3d_locations)
         perm = mm_permeability_trajectory(tm, bottom_states=bottom_indices, top_states=top_indices, lagtime_s=(1e-9 * params['LOAD_MD_STEP_NS'] * params['WINDOW_SIZE_STEPS']))
         permeabilities[n_clusters] = perm
         print(f"Permeability for {n_clusters} clusters: {perm} (units: n_events / s / uM / NPC)")
     with open(out_dir / "7_permeabilities.pickle", "wb") as f:
         pickle.dump(permeabilities, f)
+        
+        
+

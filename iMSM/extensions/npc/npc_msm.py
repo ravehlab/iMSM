@@ -29,7 +29,7 @@ def generate_counts_matrix(data):
             counts[current_state][next_state] += 1
     return counts
 
-def generate_transition_matrix(data, n_mesostates, prior=1):
+def generate_transition_matrix(data, n_mesostates, prior=1, reversible=False):
     """
     Generate a transition matrix from an array of categorical time series.
     
@@ -38,15 +38,21 @@ def generate_transition_matrix(data, n_mesostates, prior=1):
     data : array-like
         Array of shape [n_diffusers, t] containing categorical data, categories denoted by integers.
         categories should probably be sorted somehow (center of mass in fg space?). 
-    n_clusters : int
+    n_mesostates : int
         
     Returns:
     --------
     transition_matrix : numpy.ndarray
         Matrix of transition probabilities
-    states : list
-        List of unique states (categories)
     """
+    if reversible:
+        counts = deeptime.markov.TransitionCountEstimator(lagtime=1, count_mode="sliding", n_states=n_mesostates).fit(data).fetch_model().count_matrix
+        pseudo_counts = prior * np.eye(n_mesostates)
+        counts += pseudo_counts
+        # Use ML MSM for reversible matrices properly.
+        mm = deeptime.markov.msm.MaximumLikelihoodMSM(reversible=True).fit(counts).fetch_model()
+        return mm.transition_matrix
+
     counts = generate_counts_matrix(data)
     
     # Create transition matrix

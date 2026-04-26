@@ -209,7 +209,7 @@ class SKM():
         return new_centroids, new_assignments
 
 
-    def fit(self, X):
+    def fit(self, X, prune_thresh=0.95):
         if X.shape[0] < self.k:
             raise ValueError("Number of clusters k cannot be greater than number of samples.")
         if X.shape[1] != self.d:
@@ -236,7 +236,7 @@ class SKM():
         
         _, self.assignments = index.search(sym_X, 1)
         self.assignments = self.assignments.flatten()
-        self.centroids, self.assignments = self.merge_heavy_nuc_cys_centroids(self.centroids, self.assignments, thresh=0.95)
+        self.centroids, self.assignments = self.merge_heavy_nuc_cys_centroids(self.centroids, self.assignments, thresh=prune_thresh)
         self.centroids, self.assignments = self.prune_underpopulated_centroids(self.centroids, self.assignments, min_cluster_size=25)
         # self.centroids, self.assignments = self.remove_duplicate_centroids(self.centroids, self.assignments)
         self.y = self.assignments
