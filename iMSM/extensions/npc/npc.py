@@ -66,6 +66,7 @@ class iMSMConfig:
     split_nc: bool = True
     custom_fg_coords_path: Optional[str] = None # For sims w/ multiple kap types, to not redo loading of FGs
     custom_kap_coords_path: Optional[str] = None # For consistency
+    categorize_sim_times: Optional[List[str]] = None # Optional list of sim times to merge (e.g. ["0-5", "5-10"]). If None, uses the default time range.
     
     # --- Stage 4: Embedding ---
     window_size_steps: int = 10 # Window time is WINDOW_SIZE_STEPS * LOAD_MD_STEP_NS
@@ -76,6 +77,7 @@ class iMSMConfig:
     n_clusters: List[int] = field(default_factory=lambda: [40, 80, 160, 320, 640, 1280])
     prune_thresh: float = 0.95 # Threshold for merging heavy nucleoplasm/cytoplasm clusters in sym-kmeans clustering (between 0 and 1, lower means more aggressive merging)
     save_cluster_3d_locations: bool = True # Whether to save 3D locations of clusters (for state choice by distance)
+    clustering_z_strength: float = 0.0 # Strength for the Z axis feature in clustering (0 means disabled)
     
     # --- Stage 6: MSM ---
     tm_prior: float = 0
@@ -84,8 +86,8 @@ class iMSMConfig:
     # --- Stage 7: Stats ---
     use_pcca: bool = False # whether to perform PCCA to coarse-grain the transition matrix
     pcca_macrostates: int = 5 # number of macrostates to coarse-grain to if use_pcca is True
-    state_choice_method: str = "prominent" # options: "prominent", "distance"
-    distance_state_threshold_nm: float = 10 # only used if STATE_CHOICE_METHOD is "distance"
+    state_choice_method: str = "prominent" # options: "prominent", "distance", "distance_clustering_z"
+    distance_state_threshold_nm: float = 10 # only used if STATE_CHOICE_METHOD is "distance" or "distance_clustering_z"
     # If set, uses a linear-ramp soft-assignment around ±distance_state_threshold_nm instead
     # of a hard threshold.  soft_scale_nm is the ramp width in nm: weight rises linearly
     # from 0 at (threshold − soft_scale_nm) to 1 at threshold (and vice-versa for bottom).
@@ -153,10 +155,10 @@ def run(checkpoints_path, start_stage=1, end_stage=7, params_override=None):
 def validate_params(params):
     if params['CLUSTERING_TYPE'] != "sym-faiss":
         raise ValueError("Only 'sym-faiss' clustering type is supported in this pipeline.")
-    if params['STATE_CHOICE_METHOD'] not in ["prominent", "distance"]:
-        raise ValueError("STATE_CHOICE_METHOD must be either 'prominent' or 'distance'.")
-    if params['STATE_CHOICE_METHOD'] == "distance" and params['DISTANCE_STATE_THRESHOLD_NM'] <= 0:
-        raise ValueError("DISTANCE_STATE_THRESHOLD_NM must be positive if STATE_CHOICE_METHOD is 'distance'.")
+    if params['STATE_CHOICE_METHOD'] not in ["prominent", "distance", "distance_clustering_z"]:
+        raise ValueError("STATE_CHOICE_METHOD must be 'prominent', 'distance', or 'distance_clustering_z'.")
+    if params['STATE_CHOICE_METHOD'] in ["distance", "distance_clustering_z"] and params['DISTANCE_STATE_THRESHOLD_NM'] <= 0:
+        raise ValueError("DISTANCE_STATE_THRESHOLD_NM must be positive if STATE_CHOICE_METHOD is distance-based.")
     if params['DATA_SUBSET_INDEX'] is not None and params['DATA_SUBSET_INDEX'] >= (1 / params['DATA_SUBSET']):
         raise ValueError("DATA_SUBSET_INDEX must be less than 1 / DATA_SUBSET (or None).")
     if params['MODE'] == "bootstrap" and params['BOOTSTRAP_REPEATS'] <= 0:
@@ -224,7 +226,11 @@ def stage_02_loadFGs(params):
 def stage_03_categorize(params):
     from iMSM.extensions.npc.npc_categorize import categorize_multiples
     
-    _, _, sim_time_str = _time_range_strings(params)
+    _, _, default_sim_time_str = _time_range_strings(params)
+    sim_times = params.get('CATEGORIZE_SIM_TIMES')
+    if not sim_times:
+        sim_times = [default_sim_time_str]
+
     fgs_path = (
         params['CUSTOM_FG_COORDS_PATH']
         if params['CUSTOM_FG_COORDS_PATH']
@@ -237,7 +243,7 @@ def stage_03_categorize(params):
     )
     categorize_multiples(
         sim_indexes=params['LOAD_MD_SIMS_RANGE'],
-        sim_times=[sim_time_str],
+        sim_times=sim_times,
         diffuser_coords_path_prefix=kaps_path,
         fg_coords_path_prefix=fgs_path,
         step=1,
@@ -279,6 +285,13 @@ def _stage_5_cluster_subset(params):
     _ensure_dir(_cp(params, "5_clustering_subsets", subset))
     _ensure_dir(_cp(params, "5_clustered_subsets", subset))
     _, _, sim_time_str = _time_range_strings(params)
+
+    kaps_path = (
+        params['CUSTOM_KAP_COORDS_PATH']
+        if params['CUSTOM_KAP_COORDS_PATH']
+        else str(_cp(params, "1_single_sim_kap_coords")) + "/"
+    )
+
     load_reduce_cluster_save(
         pca_components=220,
         n_clusters=params['N_CLUSTERS'],
@@ -290,12 +303,13 @@ def _stage_5_cluster_subset(params):
         data_subset_index=params['DATA_SUBSET_INDEX'],
         data_subset_mode=params['DATA_SUBSET_MODE'],
         n_sims=len(params['LOAD_MD_SIMS_RANGE']),
-        kap_coords_dir=str(_cp(params, "1_single_sim_kap_coords")),
+        kap_coords_dir=kaps_path,
         sim_indexes=params['LOAD_MD_SIMS_RANGE'],
         sim_time_str=sim_time_str,
         window_size=params['WINDOW_SIZE_STEPS'],
         prune_thresh=params['PRUNE_THRESH'],
-        save_cluster_3d_locations=params['SAVE_CLUSTER_3D_LOCATIONS']
+        save_cluster_3d_locations=params['SAVE_CLUSTER_3D_LOCATIONS'],
+        clustering_z_strength=params['CLUSTERING_Z_STRENGTH']
         )
 
 def _stage_5_cluster_normal(params):
@@ -303,6 +317,13 @@ def _stage_5_cluster_normal(params):
     _ensure_dir(_cp(params, "5_clustering"))
     _ensure_dir(_cp(params, "5_clustered"))
     _, _, sim_time_str = _time_range_strings(params)
+
+    kaps_path = (
+        params['CUSTOM_KAP_COORDS_PATH']
+        if params['CUSTOM_KAP_COORDS_PATH']
+        else str(_cp(params, "1_single_sim_kap_coords")) + "/"
+    )
+
     load_reduce_cluster_save(
         pca_components=220,
         n_clusters=params['N_CLUSTERS'],
@@ -310,12 +331,13 @@ def _stage_5_cluster_normal(params):
         save_pca_cluster_path=str(_cp(params, "5_clustering", "#c#clusters.pickle")),
         save_clustered_path=str(_cp(params, "5_clustered", "#c#clusters.pickle")),
         verbose=False,
-        kap_coords_dir=str(_cp(params, "1_single_sim_kap_coords")),
+        kap_coords_dir=kaps_path,
         sim_indexes=params['LOAD_MD_SIMS_RANGE'],
         sim_time_str=sim_time_str,
         window_size=params['WINDOW_SIZE_STEPS'],
         prune_thresh=params['PRUNE_THRESH'],
-        save_cluster_3d_locations=params['SAVE_CLUSTER_3D_LOCATIONS']
+        save_cluster_3d_locations=params['SAVE_CLUSTER_3D_LOCATIONS'],
+        clustering_z_strength=params['CLUSTERING_Z_STRENGTH']
         )
 
 def stage_06_buildMSM(params):
@@ -570,6 +592,16 @@ def get_top_bottom_states(clustering, state_choice_method, distance_state_thresh
     elif state_choice_method == "nuc_cyt_treshold":
         bottom_indices = np.where(clustering.centroids[:,0] > distance_state_threshold_nm)[0]
         top_indices = np.where(clustering.centroids[:,-1] > distance_state_threshold_nm)[0]
+    elif state_choice_method == "distance_clustering_z":
+        if not hasattr(clustering, 'centroids_z_actual'):
+            raise ValueError("clustering does not have centroids_z_actual. Ensure clustering_z_strength > 0 was used.")
+        mus_z = clustering.centroids_z_actual.flatten()
+        if soft_scale_nm is not None:
+            top_indices    = np.clip((mus_z  - (distance_state_threshold_nm - soft_scale_nm)) / soft_scale_nm, 0.0, 1.0)
+            bottom_indices = np.clip((-mus_z - (distance_state_threshold_nm - soft_scale_nm)) / soft_scale_nm, 0.0, 1.0)
+        else:
+            bottom_indices = np.where(mus_z <= -distance_state_threshold_nm)[0]
+            top_indices = np.where(mus_z >= distance_state_threshold_nm)[0]
     return bottom_indices, top_indices
             
 def stage_07_computePermeabilities(params):
@@ -612,21 +644,26 @@ def _stage_07_computePermeabilities_bootstrap(params):
                 tm = pcca.coarse_grained_transition_matrix
                 memberships = pcca.memberships # shape: (n_microstates, n_macrostates)
                 
-                from iMSM.extensions.npc.npc_graph_figure import estimate_cluters_mu_cov, calc_coordinate_edges_dict
-                from iMSM.extensions.npc.npc_utils import get_sorted_anchor_coordinates_np
-                anchor_coordinates = get_sorted_anchor_coordinates_np()[1]
-                coordinate_edges = calc_coordinate_edges_dict(anchor_coordinates)
-                mus, _ = estimate_cluters_mu_cov(2000, clustering.centroids, coordinate_edges, range(clustering.centroids.shape[0]))
+                if params.get('STATE_CHOICE_METHOD') == 'distance_clustering_z':
+                    micro_mus_z = clustering.centroids_z_actual.flatten()
+                    macro_mus_z = (memberships.T @ micro_mus_z) / memberships.sum(axis=0)
+                else:
+                    from iMSM.extensions.npc.npc_graph_figure import estimate_cluters_mu_cov, calc_coordinate_edges_dict
+                    from iMSM.extensions.npc.npc_utils import get_sorted_anchor_coordinates_np
+                    anchor_coordinates = get_sorted_anchor_coordinates_np()[1]
+                    coordinate_edges = calc_coordinate_edges_dict(anchor_coordinates)
+                    mus, _ = estimate_cluters_mu_cov(2000, clustering.centroids, coordinate_edges, range(clustering.centroids.shape[0]))
+                    macro_mus = (memberships.T @ mus) / memberships.sum(axis=0)[:, None]
+                    macro_mus_z = macro_mus[:, 1]
                 
-                macro_mus = (memberships.T @ mus) / memberships.sum(axis=0)[:, None]
                 if params.get('SOFT_SCALE_NM') is not None:
                     soft_scale_nm = params['SOFT_SCALE_NM']
                     distance_state_threshold_nm = params['DISTANCE_STATE_THRESHOLD_NM']
-                    top_indices    = np.clip((macro_mus[:, 1]  - (distance_state_threshold_nm - soft_scale_nm)) / soft_scale_nm, 0.0, 1.0)
-                    bottom_indices = np.clip((-macro_mus[:, 1] - (distance_state_threshold_nm - soft_scale_nm)) / soft_scale_nm, 0.0, 1.0)
+                    top_indices    = np.clip((macro_mus_z  - (distance_state_threshold_nm - soft_scale_nm)) / soft_scale_nm, 0.0, 1.0)
+                    bottom_indices = np.clip((-macro_mus_z - (distance_state_threshold_nm - soft_scale_nm)) / soft_scale_nm, 0.0, 1.0)
                 else:
-                    bottom_indices = np.where(macro_mus[:, 1] <= -params['DISTANCE_STATE_THRESHOLD_NM'])[0]
-                    top_indices = np.where(macro_mus[:, 1] >= params['DISTANCE_STATE_THRESHOLD_NM'])[0]
+                    bottom_indices = np.where(macro_mus_z <= -params['DISTANCE_STATE_THRESHOLD_NM'])[0]
+                    top_indices = np.where(macro_mus_z >= params['DISTANCE_STATE_THRESHOLD_NM'])[0]
 
             # perm = mm_permiability(tm, bottom_states=bottom_indices, top_states=top_indices)
             perm = mm_permeability_trajectory(tm, bottom_states=bottom_indices, top_states=top_indices, lagtime_s=(1e-9 * params['LOAD_MD_STEP_NS'] * params['WINDOW_SIZE_STEPS']))
@@ -654,23 +691,28 @@ def _stage_07_computePermeabilities_normal(params):
             tm = pcca.coarse_grained_transition_matrix
             memberships = pcca.memberships # shape: (n_microstates, n_macrostates)
             
-            from iMSM.extensions.npc.npc_graph_figure import estimate_cluters_mu_cov, calc_coordinate_edges_dict, estimate_clusters_mu_2
-            from iMSM.extensions.npc.npc_utils import get_sorted_anchor_coordinates_np
-            anchor_coordinates = get_sorted_anchor_coordinates_np()[1]
-            coordinate_edges = calc_coordinate_edges_dict(anchor_coordinates)
-            mus, _ = estimate_cluters_mu_cov(2000, clustering.centroids, coordinate_edges, range(clustering.centroids.shape[0]))
-            
-            # macro_mus = weighted average of micro_mus
-            macro_mus = (memberships.T @ mus) / memberships.sum(axis=0)[:, None]
+            if params.get('STATE_CHOICE_METHOD') == 'distance_clustering_z':
+                micro_mus_z = clustering.centroids_z_actual.flatten()
+                macro_mus_z = (memberships.T @ micro_mus_z) / memberships.sum(axis=0)
+            else:
+                from iMSM.extensions.npc.npc_graph_figure import estimate_cluters_mu_cov, calc_coordinate_edges_dict, estimate_clusters_mu_2
+                from iMSM.extensions.npc.npc_utils import get_sorted_anchor_coordinates_np
+                anchor_coordinates = get_sorted_anchor_coordinates_np()[1]
+                coordinate_edges = calc_coordinate_edges_dict(anchor_coordinates)
+                mus, _ = estimate_cluters_mu_cov(2000, clustering.centroids, coordinate_edges, range(clustering.centroids.shape[0]))
+                
+                # macro_mus = weighted average of micro_mus
+                macro_mus = (memberships.T @ mus) / memberships.sum(axis=0)[:, None]
+                macro_mus_z = macro_mus[:, 1]
             
             if params.get('SOFT_SCALE_NM') is not None:
                 soft_scale_nm = params['SOFT_SCALE_NM']
                 distance_state_threshold_nm = params['DISTANCE_STATE_THRESHOLD_NM']
-                top_indices    = np.clip((macro_mus[:, 1]  - (distance_state_threshold_nm - soft_scale_nm)) / soft_scale_nm, 0.0, 1.0)
-                bottom_indices = np.clip((-macro_mus[:, 1] - (distance_state_threshold_nm - soft_scale_nm)) / soft_scale_nm, 0.0, 1.0)
+                top_indices    = np.clip((macro_mus_z  - (distance_state_threshold_nm - soft_scale_nm)) / soft_scale_nm, 0.0, 1.0)
+                bottom_indices = np.clip((-macro_mus_z - (distance_state_threshold_nm - soft_scale_nm)) / soft_scale_nm, 0.0, 1.0)
             else:
-                bottom_indices = np.where(macro_mus[:, 1] <= -params['DISTANCE_STATE_THRESHOLD_NM'])[0]
-                top_indices = np.where(macro_mus[:, 1] >= params['DISTANCE_STATE_THRESHOLD_NM'])[0]
+                bottom_indices = np.where(macro_mus_z <= -params['DISTANCE_STATE_THRESHOLD_NM'])[0]
+                top_indices = np.where(macro_mus_z >= params['DISTANCE_STATE_THRESHOLD_NM'])[0]
         else:
             bottom_indices, top_indices = get_top_bottom_states(clustering=clustering,
                                                                 state_choice_method=params['STATE_CHOICE_METHOD'],
@@ -706,23 +748,28 @@ def _stage_07_computePermeabilities_subset(params):
             tm = pcca.coarse_grained_transition_matrix
             memberships = pcca.memberships # shape: (n_microstates, n_macrostates)
             
-            from iMSM.extensions.npc.npc_graph_figure import estimate_cluters_mu_cov, calc_coordinate_edges_dict, estimate_clusters_mu_2
-            from iMSM.extensions.npc.npc_utils import get_sorted_anchor_coordinates_np
-            anchor_coordinates = get_sorted_anchor_coordinates_np()[1]
-            coordinate_edges = calc_coordinate_edges_dict(anchor_coordinates)
-            mus, _ = estimate_cluters_mu_cov(2000, clustering.centroids, coordinate_edges, range(clustering.centroids.shape[0]))
-            
-            # macro_mus = weighted average of micro_mus
-            macro_mus = (memberships.T @ mus) / memberships.sum(axis=0)[:, None]
+            if params.get('STATE_CHOICE_METHOD') == 'distance_clustering_z':
+                micro_mus_z = clustering.centroids_z_actual.flatten()
+                macro_mus_z = (memberships.T @ micro_mus_z) / memberships.sum(axis=0)
+            else:
+                from iMSM.extensions.npc.npc_graph_figure import estimate_cluters_mu_cov, calc_coordinate_edges_dict, estimate_clusters_mu_2
+                from iMSM.extensions.npc.npc_utils import get_sorted_anchor_coordinates_np
+                anchor_coordinates = get_sorted_anchor_coordinates_np()[1]
+                coordinate_edges = calc_coordinate_edges_dict(anchor_coordinates)
+                mus, _ = estimate_cluters_mu_cov(2000, clustering.centroids, coordinate_edges, range(clustering.centroids.shape[0]))
+                
+                # macro_mus = weighted average of micro_mus
+                macro_mus = (memberships.T @ mus) / memberships.sum(axis=0)[:, None]
+                macro_mus_z = macro_mus[:, 1]
             
             if params.get('SOFT_SCALE_NM') is not None:
                 soft_scale_nm = params['SOFT_SCALE_NM']
                 distance_state_threshold_nm = params['DISTANCE_STATE_THRESHOLD_NM']
-                top_indices    = np.clip((macro_mus[:, 1]  - (distance_state_threshold_nm - soft_scale_nm)) / soft_scale_nm, 0.0, 1.0)
-                bottom_indices = np.clip((-macro_mus[:, 1] - (distance_state_threshold_nm - soft_scale_nm)) / soft_scale_nm, 0.0, 1.0)
+                top_indices    = np.clip((macro_mus_z  - (distance_state_threshold_nm - soft_scale_nm)) / soft_scale_nm, 0.0, 1.0)
+                bottom_indices = np.clip((-macro_mus_z - (distance_state_threshold_nm - soft_scale_nm)) / soft_scale_nm, 0.0, 1.0)
             else:
-                bottom_indices = np.where(macro_mus[:, 1] <= -params['DISTANCE_STATE_THRESHOLD_NM'])[0]
-                top_indices = np.where(macro_mus[:, 1] >= params['DISTANCE_STATE_THRESHOLD_NM'])[0]
+                bottom_indices = np.where(macro_mus_z <= -params['DISTANCE_STATE_THRESHOLD_NM'])[0]
+                top_indices = np.where(macro_mus_z >= params['DISTANCE_STATE_THRESHOLD_NM'])[0]
         else:
             bottom_indices, top_indices = get_top_bottom_states(clustering=clustering,
                                                                     state_choice_method=params['STATE_CHOICE_METHOD'],

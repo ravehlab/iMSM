@@ -2,7 +2,7 @@ import faiss
 import numpy as np
 
 class SKM():
-    def __init__(self, d, k, sym_plus_n_func, nsym, niter=300):
+    def __init__(self, d, k, sym_plus_n_func, nsym, niter=300, n_original_features=None):
         """
         d: int, dimensionality of the input data
         k: int, number of clusters, must be a multiple of nsym
@@ -17,7 +17,9 @@ class SKM():
         self.sym_plus_n_func = sym_plus_n_func
         self.nsym = nsym
         self.centroids = None
+        self.centroids_z = None
         self.assignments = None
+        self.n_original_features = n_original_features
         if k % nsym != 0:
             raise ValueError("Number of clusters k must be a multiple of nsym.")
         
@@ -236,10 +238,23 @@ class SKM():
         
         _, self.assignments = index.search(sym_X, 1)
         self.assignments = self.assignments.flatten()
+
+        if self.n_original_features is not None and self.n_original_features < self.d:
+            self.centroids = self.centroids[:, :self.n_original_features]
+
         self.centroids, self.assignments = self.merge_heavy_nuc_cys_centroids(self.centroids, self.assignments, thresh=prune_thresh)
         self.centroids, self.assignments = self.prune_underpopulated_centroids(self.centroids, self.assignments, min_cluster_size=25)
         # self.centroids, self.assignments = self.remove_duplicate_centroids(self.centroids, self.assignments)
         self.y = self.assignments
+        
+        if self.n_original_features is not None and self.n_original_features < self.d:
+            unique_labels = np.arange(self.centroids.shape[0])
+            self.centroids_z = np.zeros((self.centroids.shape[0], self.d - self.n_original_features))
+            for i, label in enumerate(unique_labels):
+                mask = (self.y == label)
+                if np.any(mask):
+                    self.centroids_z[i] = sym_X[mask, self.n_original_features:].mean(axis=0)
+                    
         return self
     
     def get_inverse_centers(self):

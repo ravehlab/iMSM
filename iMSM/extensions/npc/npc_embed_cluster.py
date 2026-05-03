@@ -521,16 +521,21 @@ def calc_shift_indices():
 shift_indices = calc_shift_indices()
 def sym_plus_n(X, n):
     n = n % 8
-    X = X[:, shift_indices[n]]
-    return X
+    num_normal_features = len(shift_indices[n])
+    X_normal = X[:, shift_indices[n]]
+    if X.shape[1] > num_normal_features:
+        X_extra = X[:, num_normal_features:]
+        return np.hstack([X_normal, X_extra])
+    return X_normal
 
-def load_reduce_cluster_save(pca_components, n_clusters: list[int], load_embedded_path, save_pca_cluster_path, save_clustered_path = None, verbose: bool = False, data_subset=None, data_subset_index=None, data_subset_mode=None, n_sims=None, kap_coords_dir=None, sim_indexes=None, sim_time_str=None, window_size=10, prune_thresh=0.95, save_cluster_3d_locations=True):
+def load_reduce_cluster_save(pca_components, n_clusters: list[int], load_embedded_path, save_pca_cluster_path, save_clustered_path = None, verbose: bool = False, data_subset=None, data_subset_index=None, data_subset_mode=None, n_sims=None, kap_coords_dir=None, sim_indexes=None, sim_time_str=None, window_size=10, prune_thresh=0.95, save_cluster_3d_locations=True, clustering_z_strength=0.0):
     # reshape to [n_diffusers * n_sections, 218]
     with open(load_embedded_path, "rb") as f:
         embedded_sections = pickle.load(f) # (n_diffusers, 218, n_sections)
         
     kap_coords = None
-    if kap_coords_dir is not None and sim_indexes is not None and sim_time_str is not None and save_cluster_3d_locations:
+    load_kaps = kap_coords_dir is not None and sim_indexes is not None and sim_time_str is not None
+    if load_kaps and (save_cluster_3d_locations or clustering_z_strength > 0.0):
         
         kap_coords_list = []
         for sim_i in sim_indexes:
@@ -552,6 +557,9 @@ def load_reduce_cluster_save(pca_components, n_clusters: list[int], load_embedde
             print("Using data subset mode: time")
             n_sections = embedded_sections.shape[2]         
             new_n_sections = int(n_sections * data_subset)
+            if new_n_sections == 0:
+                raise ValueError(f"Data subset fraction {data_subset} is too small for the number of available time sections ({n_sections}). new_n_sections became 0. If you changed WINDOW_SIZE_STEPS, ensure you rerun stage 4 to re-embed the data with the new window size.")
+            
             if data_subset_index is None or data_subset_index == -1:
                 data_subset_index = (n_sections // new_n_sections) - 1
             embedded_sections = embedded_sections[:, :, data_subset_index * new_n_sections:(data_subset_index + 1) * new_n_sections]
@@ -596,12 +604,21 @@ def load_reduce_cluster_save(pca_components, n_clusters: list[int], load_embedde
             rotated[:, 1] = x * s + y * c
             sym_coords.append(rotated)
         full_sym_coords = np.vstack(sym_coords)
+        
+    original_n_features = reshaped_embedded.shape[1]
+    if clustering_z_strength > 0.0 and reshaped_kap_coords is not None:
+        z_vals = reshaped_kap_coords[:, 2]
+        z_feature = ((z_vals + 80.0) / 160.0) * clustering_z_strength
+        reshaped_embedded = np.hstack([reshaped_embedded, z_feature[:, np.newaxis]])
     
     for _n_clusters in n_clusters:
         if verbose:
             print(f"n_clusters: {_n_clusters}")
-        pca_cluster = SKM(d=reshaped_embedded.shape[1], k=_n_clusters, niter=10, sym_plus_n_func=sym_plus_n, nsym=8)
+        pca_cluster = SKM(d=reshaped_embedded.shape[1], k=_n_clusters, niter=10, sym_plus_n_func=sym_plus_n, nsym=8, n_original_features=original_n_features)
         pca_cluster.fit(reshaped_embedded, prune_thresh=prune_thresh)
+        
+        if clustering_z_strength > 0.0 and hasattr(pca_cluster, 'centroids_z'):
+            pca_cluster.centroids_z_actual = (pca_cluster.centroids_z / clustering_z_strength) * 160.0 - 80.0
 
         # compute and save centroids 3D positions if available
         if full_sym_coords is not None:
