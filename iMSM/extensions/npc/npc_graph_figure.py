@@ -1063,3 +1063,4 @@ def comparison_plot(base_tm_path, base_cluster_path, radii, n_sites, title, in_o
             visualize_arrows_between_mesostates(P, fig, ax, good_mesostate_indices, mus, show_colorbar_title=False, in_out_flow=in_out_flow, show_colorbar=show_colorbar, min_rate=min_rate, max_rate=max_rate, time_step_us=time_step_us)
             visualize_pie_mesostates(clusters, P, ax, good_mesostate_indices, mus, PIE_COLORS, add_nucleus_cytoplasm_text=True, pie_scaling=pie_scaling, dots_only=dots_only)
             add_npc_scaffold_picture(ax)
+    return fig

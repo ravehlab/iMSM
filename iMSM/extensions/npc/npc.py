@@ -25,6 +25,12 @@ def _subset_folder(params: dict) -> str:
     mode_string = "_simulations" if params['DATA_SUBSET_MODE'] == "simulation" else ""
     return f"{params['DATA_SUBSET']:.2f}fraction{mode_string}/{params['DATA_SUBSET_INDEX']}index"
 
+
+def _get_sim_indexes(params: dict) -> List[int]:
+    sims = list(params.get('LOAD_MD_SIMS_RANGE', range(1, 31)))
+    ignored = params.get('IGNORED_SIMULATIONS', [])
+    return [s for s in sims if s not in ignored]
+
 ###
 
 @dataclass
@@ -67,6 +73,7 @@ class iMSMConfig:
     custom_fg_coords_path: Optional[str] = None # For sims w/ multiple kap types, to not redo loading of FGs
     custom_kap_coords_path: Optional[str] = None # For consistency
     categorize_sim_times: Optional[List[str]] = None # Optional list of sim times to merge (e.g. ["0-5", "5-10"]). If None, uses the default time range.
+    ignored_simulations: List[int] = field(default_factory=list) # List of simulation indices to ignore starting from stage 3
     
     # --- Stage 4: Embedding ---
     window_size_steps: int = 10 # Window time is WINDOW_SIZE_STEPS * LOAD_MD_STEP_NS
@@ -185,6 +192,15 @@ def stage_01_loadNTRs(params):
         get_nsites=0
     )
     for i, result in enumerate(kap_results):
+        if np.count_nonzero(result) == 0:
+            sim_index: int = params['LOAD_MD_SIMS_RANGE'][i] if i < len(params['LOAD_MD_SIMS_RANGE']) else i + 1
+            raise ValueError(
+                f"Loaded KAP coordinates for simulation {sim_index} are completely filled with zeros. "
+                f"Checkpoints path: {params['CHECKPOINTS_PATH']}, "
+                f"Base RMF path: {params['LOAD_MD_BASE_PATH']}, "
+                f"KAP radius: {params['LOAD_MD_KAP_RADIUS']}, "
+                f"KAP amount: {params['LOAD_MD_KAP_AMOUNT']}"
+            )
         t0_str, t1_str, sim_time_str = _time_range_strings(params)
         sim_dir = _ensure_dir(_cp(params, "1_single_sim_kap_coords", i + 1))
         with open(sim_dir / f"{sim_time_str}.pickle", "wb") as f:
@@ -218,6 +234,13 @@ def stage_02_loadFGs(params):
         one_frame_from_each=True,
     )
     for i, result in enumerate(fg_results):
+        if np.count_nonzero(result) == 0:
+            sim_index: int = params['LOAD_MD_SIMS_RANGE'][i] if i < len(params['LOAD_MD_SIMS_RANGE']) else i + 1
+            raise ValueError(
+                f"Loaded FG coordinates for simulation {sim_index} are completely filled with zeros. "
+                f"Checkpoints path: {params['CHECKPOINTS_PATH']}, "
+                f"Base RMF path: {params['LOAD_MD_BASE_PATH']}"
+            )
         t0_str, t1_str, sim_time_str = _time_range_strings(params)
         sim_dir = _ensure_dir(_cp(params, "2_single_sim_fg_coords", i + 1))
         with open(sim_dir / f"{sim_time_str}-fgs.pickle", "wb") as f:
@@ -242,7 +265,7 @@ def stage_03_categorize(params):
         else str(_cp(params, "1_single_sim_kap_coords")) + "/"
     )
     categorize_multiples(
-        sim_indexes=params['LOAD_MD_SIMS_RANGE'],
+        sim_indexes=_get_sim_indexes(params),
         sim_times=sim_times,
         diffuser_coords_path_prefix=kaps_path,
         fg_coords_path_prefix=fgs_path,
@@ -284,7 +307,10 @@ def _stage_5_cluster_subset(params):
     subset = _subset_folder(params)
     _ensure_dir(_cp(params, "5_clustering_subsets", subset))
     _ensure_dir(_cp(params, "5_clustered_subsets", subset))
-    _, _, sim_time_str = _time_range_strings(params)
+    _, _, default_sim_time_str = _time_range_strings(params)
+    sim_times = params.get('CATEGORIZE_SIM_TIMES')
+    if not sim_times:
+        sim_times = [default_sim_time_str]
 
     kaps_path = (
         params['CUSTOM_KAP_COORDS_PATH']
@@ -302,10 +328,10 @@ def _stage_5_cluster_subset(params):
         data_subset=params['DATA_SUBSET'],
         data_subset_index=params['DATA_SUBSET_INDEX'],
         data_subset_mode=params['DATA_SUBSET_MODE'],
-        n_sims=len(params['LOAD_MD_SIMS_RANGE']),
+        n_sims=len(_get_sim_indexes(params)),
         kap_coords_dir=kaps_path,
-        sim_indexes=params['LOAD_MD_SIMS_RANGE'],
-        sim_time_str=sim_time_str,
+        sim_indexes=_get_sim_indexes(params),
+        sim_time_str=sim_times,
         window_size=params['WINDOW_SIZE_STEPS'],
         prune_thresh=params['PRUNE_THRESH'],
         save_cluster_3d_locations=params['SAVE_CLUSTER_3D_LOCATIONS'],
@@ -316,7 +342,10 @@ def _stage_5_cluster_normal(params):
     from iMSM.extensions.npc.npc_embed_cluster import load_reduce_cluster_save
     _ensure_dir(_cp(params, "5_clustering"))
     _ensure_dir(_cp(params, "5_clustered"))
-    _, _, sim_time_str = _time_range_strings(params)
+    _, _, default_sim_time_str = _time_range_strings(params)
+    sim_times = params.get('CATEGORIZE_SIM_TIMES')
+    if not sim_times:
+        sim_times = [default_sim_time_str]
 
     kaps_path = (
         params['CUSTOM_KAP_COORDS_PATH']
@@ -332,8 +361,8 @@ def _stage_5_cluster_normal(params):
         save_clustered_path=str(_cp(params, "5_clustered", "#c#clusters.pickle")),
         verbose=False,
         kap_coords_dir=kaps_path,
-        sim_indexes=params['LOAD_MD_SIMS_RANGE'],
-        sim_time_str=sim_time_str,
+        sim_indexes=_get_sim_indexes(params),
+        sim_time_str=sim_times,
         window_size=params['WINDOW_SIZE_STEPS'],
         prune_thresh=params['PRUNE_THRESH'],
         save_cluster_3d_locations=params['SAVE_CLUSTER_3D_LOCATIONS'],
@@ -381,7 +410,7 @@ def _stage_06_buildMSM_normal(params, n_clusters, actual_n_clusters, clustered_d
 def _stage_06_buildMSM_bootstrap(params, n_clusters, actual_n_clusters, clustered_data):
     from iMSM.extensions.npc.npc_msm import generate_transition_matrix
     out_dir = _ensure_dir(_cp(params, "6_transition_matrices_bootstrap"))
-    n_sims = len(params['LOAD_MD_SIMS_RANGE'])
+    n_sims = len(_get_sim_indexes(params))
     n_trajs_per_sim = clustered_data.shape[0] // (n_sims * 8) # 8 for eightwise symmetry
     for b in range(params['BOOTSTRAP_REPEATS']):
         # resample sims with replacement

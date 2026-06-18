@@ -238,6 +238,7 @@ def categorize_multiples(sim_indexes, sim_times, diffuser_coords_path_prefix, fg
 
 
     arrays = [["temp" for _ in range(len(sim_times))] for _ in range(len(sim_indexes))]    
+    sim_to_idx = {sim_i: idx for idx, sim_i in enumerate(sim_indexes)}
 
     def process_file_worker(i_time):
         sim_i, time_i, time = i_time
@@ -251,7 +252,7 @@ def categorize_multiples(sim_indexes, sim_times, diffuser_coords_path_prefix, fg
         if split_nc:
             fg_trajectories = split_fg_trajectories_nc(fg_trajectories)
         categorized = categorize_diffusers_over_time(diffuser_trajectories, fg_trajectories, k=k, step=step, diffuser_radius_nm=diffuser_radius_nm, max_surface_distance_nm=max_surface_distance_nm)
-        arrays[sim_i - 1][time_i] = categorized
+        arrays[sim_to_idx[sim_i]][time_i] = categorized
 
     num_processes = len(os.sched_getaffinity(0))
     # num_processes = 1

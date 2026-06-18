@@ -2,7 +2,7 @@ from sklearn.base import ClusterMixin
 from deeptime.decomposition import TICA
 import sklearn.cluster
 from sklearn.decomposition import PCA
-from utils import z_order_get_only_state_to_idx_dict, z_order_get_only_state_to_idx_dict_nc, z_order_get_only_state_to_idx_dict_nmc
+from iMSM.extensions.npc.npc_utils import z_order_get_only_state_to_idx_dict, z_order_get_only_state_to_idx_dict_nc, z_order_get_only_state_to_idx_dict_nmc
 import numpy as np
 from scipy.stats import wasserstein_distance_nd
 import sklearn
@@ -536,15 +536,22 @@ def load_reduce_cluster_save(pca_components, n_clusters: list[int], load_embedde
     kap_coords = None
     load_kaps = kap_coords_dir is not None and sim_indexes is not None and sim_time_str is not None
     if load_kaps and (save_cluster_3d_locations or clustering_z_strength > 0.0):
+        if isinstance(sim_time_str, str):
+            sim_time_strs = [sim_time_str]
+        else:
+            sim_time_strs = sim_time_str
         
         kap_coords_list = []
         for sim_i in sim_indexes:
-            with open(f"{kap_coords_dir}/{sim_i}/{sim_time_str}.pickle", "rb") as f:
-                coords = pickle.load(f) # [kap_amount, 3, n_frames]
-                # In case get_nsites was enabled (nsites shape), extract just center
-                if len(coords.shape) == 4:
-                    coords = coords[:, 0, :, :]
-                kap_coords_list.append(coords)
+            sim_coords_list = []
+            for t_str in sim_time_strs:
+                with open(f"{kap_coords_dir}/{sim_i}/{t_str}.pickle", "rb") as f:
+                    coords = pickle.load(f) # [kap_amount, 3, n_frames]
+                    # In case get_nsites was enabled (nsites shape), extract just center
+                    if len(coords.shape) == 4:
+                        coords = coords[:, 0, :, :]
+                    sim_coords_list.append(coords)
+            kap_coords_list.append(np.concatenate(sim_coords_list, axis=2))
         kap_coords = np.concatenate(kap_coords_list, axis=0) # [n_diffusers, 3, n_frames]
         
         n_sections_raw = kap_coords.shape[2] // window_size
