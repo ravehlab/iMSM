@@ -581,7 +581,7 @@ def weighted_power_law_fit(x, y, y_err=None):
     slope, intercept = coeffs
     return x_fit, y_fit, slope, intercept, y_fit_per_original_x
 
-def plot_permeability_dataset(ax, data, x_col, y_col, color, label, marker, low_col, high_col):
+def plot_permeability_dataset(ax, data, x_col, y_col, color, label, marker, low_col, high_col, linewidth=2, markersize=8):
     
     if data.empty:
         return
@@ -595,7 +595,7 @@ def plot_permeability_dataset(ax, data, x_col, y_col, color, label, marker, low_
         y_err = (y_err_lower + y_err_upper) / 2
         
         x_fit, y_fit, slope, intercept, _ = weighted_power_law_fit(data[x_col], data[y_col], y_err=None)
-        ax.plot(x_fit, y_fit, linestyle='--', color=color, alpha=0.7)
+        ax.plot(x_fit, y_fit, linestyle='--', color=color, alpha=0.7, linewidth=linewidth)
         
         x_fit_lo, y_fit_lo, _, _, _ = weighted_power_law_fit(data[x_col], data[low_col], y_err=None)
         x_fit_hi, y_fit_hi, _, _, _ = weighted_power_law_fit(data[x_col], data[high_col], y_err=None)
@@ -606,26 +606,26 @@ def plot_permeability_dataset(ax, data, x_col, y_col, color, label, marker, low_
             data[y_col],
             yerr=[y_err_lower, y_err_upper],
             marker=marker,
-            markersize=8,
+            markersize=markersize,
             linestyle='None',
             # label=fr'{label}: $y={10**intercept:.2f}x^{{{slope:.2f}}}$',
-            label = fr'{label}: $y \propto x^{{{slope:.2f}}}$',
+            label = fr'{label}$\propto x^{{{slope:.2f}}}$',
             color=color,
-            linewidth=2,
+            linewidth=linewidth,
         )
     else:
         x_fit, y_fit, slope, intercept, _ = weighted_power_law_fit(data[x_col], data[y_col], None)
-        ax.plot(x_fit, y_fit, linestyle='--', color=color, alpha=0.7)
+        ax.plot(x_fit, y_fit, linestyle='--', color=color, alpha=0.7, linewidth=linewidth)
         ax.plot(
             data[x_col],
             data[y_col],
             marker=marker,
-            markersize=8,
+            markersize=markersize,
             linestyle='None',
             # label=fr'{label}: $y={10**intercept:.2f}x^{{{slope:.2f}}}$',
-            label = fr'{label}: $y \propto x^{{{slope:.2f}}}$',
+            label = fr'{label}$\propto x^{{{slope:.2f}}}$',
             color=color,
-            linewidth=2
+            linewidth=linewidth
         )
 
 
@@ -648,10 +648,10 @@ def plot_full_permeability_comparison():
 
     # Create 1 row, 2 columns (one for MSM, one for MD)
     fig, axes = plt.subplots(1, 2, figsize=(16, 7), sharey=True)
-    fig.suptitle('Permeability Comparison: iMSM vs MD', fontsize=24)
+    fig.suptitle('Permeability Comparison: iMSM vs MD', fontsize=30)
 
-    axes[0].set_title('iMSM', fontsize=26)
-    axes[1].set_title('MD', fontsize=26)
+    axes[0].set_title('iMSM', fontsize=40)
+    axes[1].set_title('MD', fontsize=40)
 
     for site in site_values:
         # Use .copy() to prevent Pandas SettingWithCopyWarning
@@ -671,7 +671,9 @@ def plot_full_permeability_comparison():
             label=f'{site} sites',
             marker=site_markers[site],   # Differentiate by marker shape
             low_col=None,
-            high_col=None
+            high_col=None,
+            linewidth=3,
+            markersize=11,
         )
         
         # 2. Plot MD data
@@ -684,7 +686,9 @@ def plot_full_permeability_comparison():
             label=f'{site} sites',
             marker=site_markers[site],   # Differentiate by marker shape
             low_col='lower_permeability',
-            high_col='upper_permeability'
+            high_col='upper_permeability',
+            linewidth=3,
+            markersize=11,
         )
 
     # Format both axes
@@ -693,19 +697,19 @@ def plot_full_permeability_comparison():
         ax.set_yscale('log')
         ax.set_xticks([10**1, 10**2])
         ax.set_xticklabels([r'$10^1$', r'$10^2$'])
-        ax.set_ylim(1, 10**4.5)
+        ax.set_ylim(0.3, 10**4.5)
         ax.grid(True, alpha=0.3)
-        ax.set_xlabel('Molecular mass (kDa)', fontsize=24)
+        ax.set_xlabel('Molecular mass (kDa)', fontsize=30)
         
         # Grab the current legend handles and labels, then reverse them
         handles, labels = ax.get_legend_handles_labels()
-        ax.legend(handles[::-1], labels[::-1], fontsize=20)
+        ax.legend(handles[::-1], labels[::-1], fontsize=24)
         
-        ax.tick_params(axis='x', labelsize=16)
-        ax.tick_params(axis='y', labelsize=16)
+        ax.tick_params(axis='x', labelsize=27)
+        ax.tick_params(axis='y', labelsize=27)
 
     # Only the leftmost subplot needs the Y-axis label
-    axes[0].set_ylabel('Permeability (1/s/µM/NPC)', fontsize=26)
+    axes[0].set_ylabel('Permeability (1/s/µM/NPC)', fontsize=32)
 
     plt.tight_layout(rect=[0, 0, 1, 0.95])
     plt.show()
@@ -783,7 +787,7 @@ def plot_full_permeability_comparison_alt():
 
 
 
-def plot_speedup_factor_heatmap():
+def plot_speedup_factor_heatmap(use_sim_subset=False):
 
     perms_all_md, lower_perms_all_md, upper_perms_all_md, perms_all_md_sim_subset, lower_perms_all_md_sim_subset, upper_perms_all_md_sim_subset, perms_all_msm, perms_all_msm_with_init_time, perms_all_msm_sim_subset, sites_to_fitted_perms, sites_to_fitted_perms_lo, sites_to_fitted_perms_hi = load_convergence_data()
 
@@ -792,12 +796,14 @@ def plot_speedup_factor_heatmap():
     sns.set_theme(style='white')
 
     # ----------------- Data Processing (Preserved) -----------------
-    use_sim_subset = False
     min_convergence_factor = 0.5
     max_convergence_factor = 2
 
     md_convergences = np.zeros((len(radii), len(sites_list)))
     msm_convergences = np.zeros((len(radii), len(sites_list)))
+
+    current_subsets = sims_subsets if use_sim_subset else subsets
+    current_times = sims_total_simulation_times if use_sim_subset else total_simulation_times
 
     for i, radius in enumerate(radii):
         for j, sites in enumerate(sites_list):
@@ -817,16 +823,16 @@ def plot_speedup_factor_heatmap():
             final_md_perm = md_perms_smooth[-1]
             final_msm_perm = msm_perms_smooth[-1]
             
-            for k in range(len(subsets)):
+            for k in range(len(current_subsets)):
                 if np.all(md_perms_smooth[k:] >= min_convergence_factor * final_md_perm) and \
                 np.all(md_perms_smooth[k:] <= max_convergence_factor * final_md_perm):
-                    md_convergences[i, j] = total_simulation_times[k]
+                    md_convergences[i, j] = current_times[k]
                     break
                     
-            for k in range(len(subsets)):
+            for k in range(len(current_subsets)):
                 if np.all(msm_perms_smooth[k:] >= min_convergence_factor * final_msm_perm) and \
                 np.all(msm_perms_smooth[k:] <= max_convergence_factor * final_msm_perm):
-                    msm_convergences[i, j] = total_simulation_times[k]
+                    msm_convergences[i, j] = current_times[k]
                     break
                 
             if (sites == 6 and radius == 22):
@@ -969,11 +975,10 @@ def plot_speedup_factor_heatmap():
     return fig
 
 
-def plot_all_convergences():
+def plot_all_convergences(use_sim_subset=False):
     perms_all_md, lower_perms_all_md, upper_perms_all_md, perms_all_md_sim_subset, lower_perms_all_md_sim_subset, upper_perms_all_md_sim_subset, perms_all_msm, perms_all_msm_with_init_time, perms_all_msm_sim_subset, sites_to_fitted_perms, sites_to_fitted_perms_lo, sites_to_fitted_perms_hi = load_convergence_data()
 
     # --- New Boolean Flags ---
-    include_sim_subset = False  # Set to False to hide the time subset plots
     smooth_msm = True           # Set to True to perform cumulative smoothing on MSM data
     include_init_time = False
 
@@ -995,58 +1000,56 @@ def plot_all_convergences():
             ax = axes[j, i]
             
             # MD Data
-            md_perms = perms_all_md[i, j, :]
-            md_lower_perms = lower_perms_all_md[i, j, :]
-            md_upper_perms = upper_perms_all_md[i, j, :]
-            
-            md_perms_sim_subset = perms_all_md_sim_subset[i, j, :]
-            md_lower_perms_sim_subset = lower_perms_all_md_sim_subset[i, j, :]
-            md_upper_perms_sim_subset = upper_perms_all_md_sim_subset[i, j, :]
-            
-            # MSM Data
-            msm_perms = perms_all_msm[i, j, :]
-            msm_perms_init_time = perms_all_msm_with_init_time[i, j, :]
-            msm_sim_subset_perms = perms_all_msm_sim_subset[i, j, :]
+            if use_sim_subset:
+                md_perms = perms_all_md_sim_subset[i, j, :]
+                md_lower_perms = lower_perms_all_md_sim_subset[i, j, :]
+                md_upper_perms = upper_perms_all_md_sim_subset[i, j, :]
+                msm_perms = perms_all_msm_sim_subset[i, j, :]
+                x_times = np.array(sims_total_simulation_times)
+                md_style = STYLE['md_sim']
+                msm_style = STYLE['msm_sim']
+            else:
+                md_perms = perms_all_md[i, j, :]
+                md_lower_perms = lower_perms_all_md[i, j, :]
+                md_upper_perms = upper_perms_all_md[i, j, :]
+                msm_perms = perms_all_msm[i, j, :]
+                msm_perms_init_time = perms_all_msm_with_init_time[i, j, :]
+                x_times = np.array(total_simulation_times)
+                md_style = STYLE['md_time']
+                msm_style = STYLE['msm_time']
             
             # Apply smoothing to MSM data if flag is set
             if smooth_msm:
                 msm_perms = apply_smoothing(msm_perms)
-                msm_perms_init_time = apply_smoothing(msm_perms_init_time)
-                msm_sim_subset_perms = apply_smoothing(msm_sim_subset_perms)
+                if not use_sim_subset:
+                    msm_perms_init_time = apply_smoothing(msm_perms_init_time)
                 
             div_factor = 1  
             
             # 1. Target "Leeway" Zone
-            t_line = plot_target_line(ax, total_simulation_times, sites_to_fitted_perms[sites][i], 
+            t_line = plot_target_line(ax, x_times, sites_to_fitted_perms[sites][i], 
                                     sites_to_fitted_perms_lo[sites][i], sites_to_fitted_perms_hi[sites][i])
             if targ_line is None:
                 targ_line = t_line
 
             # 2. MD Plots
-            if include_sim_subset:
-                plot_series(ax, np.array(sims_total_simulation_times), md_perms_sim_subset, STYLE['md_sim'], STAR_Y_PERM, md_lower_perms_sim_subset, md_upper_perms_sim_subset, gam_ls='--')
-
-
-            plot_series(ax, np.array(total_simulation_times), md_perms, STYLE['md_time'], STAR_Y_PERM, md_lower_perms, md_upper_perms)
+            plot_series(ax, x_times, md_perms, md_style, STAR_Y_PERM, md_lower_perms, md_upper_perms)
 
 
             # 3. iMSM Plots
-            plot_series(ax, np.array(total_simulation_times), msm_perms / div_factor, STYLE['msm_time'], STAR_Y_PERM)
-            if include_init_time and sites != 6:
+            plot_series(ax, x_times, msm_perms / div_factor, msm_style, STAR_Y_PERM)
+            if not use_sim_subset and include_init_time and sites != 6:
                 # We can use a different marker/color for distinction, here we modify the msm_time style slightly
                 style_msm_init = STYLE['msm_time'].copy()
                 style_msm_init['color'] = '#4daf4a'  # green
                 plot_series(ax, np.array(total_simulation_times), msm_perms_init_time / div_factor, style_msm_init, STAR_Y_PERM)
-            
-            if include_sim_subset:
-                plot_series(ax, np.array(sims_total_simulation_times), msm_sim_subset_perms / div_factor, STYLE['msm_sim'], STAR_Y_PERM, gam_ls='--')
             
             # Subplot aesthetics
             ax.grid(True, alpha=0.3)
             ax.set_xscale('log')
             ax.set_yscale('log')
             
-            ax.set_xlim(sims_total_simulation_times[0]*0.9, sims_total_simulation_times[-1]*1.1)
+            ax.set_xlim(x_times[0]*0.9, x_times[-1]*1.1)
             ax.set_ylim(10**-1, 10**4)
             
             ax.tick_params(axis='both', which='major', labelsize=24)
@@ -1073,27 +1076,413 @@ def plot_all_convergences():
     # Dynamically build the legend based on the boolean flags
     custom_lines = []
 
-    custom_lines.append(Line2D([0], [0], color=STYLE['msm_time']['color'], marker=STYLE['msm_time']['marker'], linestyle='-', linewidth=2, label='iMSM (time subset)'))
-    if include_init_time:
-        custom_lines.append(Line2D([0], [0], color='#4daf4a', marker=STYLE['msm_time']['marker'], linestyle='-', linewidth=2, label='iMSM (init time)'))
+    if use_sim_subset:
+        custom_lines.append(Line2D([0], [0], color=STYLE['msm_sim']['color'], marker=STYLE['msm_sim']['marker'], linestyle='-', linewidth=2, label='iMSM (sim subset)'))
+        custom_lines.append(Line2D([0], [0], color=STYLE['md_sim']['color'], marker=STYLE['md_sim']['marker'], linestyle='-', linewidth=1.5, alpha=0.8, label='MD (sim subset)'))
+    else:
+        custom_lines.append(Line2D([0], [0], color=STYLE['msm_time']['color'], marker=STYLE['msm_time']['marker'], linestyle='-', linewidth=2, label='iMSM (time subset)'))
+        if include_init_time:
+            custom_lines.append(Line2D([0], [0], color='#4daf4a', marker=STYLE['msm_time']['marker'], linestyle='-', linewidth=2, label='iMSM (init time)'))
+        custom_lines.append(Line2D([0], [0], color=STYLE['md_time']['color'], marker=STYLE['md_time']['marker'], linestyle='-', linewidth=1.5, alpha=0.8, label='MD (time subset)'))
 
-    if include_sim_subset:
-        custom_lines.append(Line2D([0], [0], color=STYLE['msm_sim']['color'], marker=STYLE['msm_sim']['marker'], linestyle='--', linewidth=2, label='iMSM (sim subset)'))
-
-    custom_lines.append(Line2D([0], [0], color=STYLE['md_time']['color'], marker=STYLE['md_time']['marker'], linestyle='-', linewidth=1.5, alpha=0.8, label='MD (time subset)'))
-
-    if include_sim_subset:
-        custom_lines.extend([
-            Line2D([0], [0], color=STYLE['md_sim']['color'], marker=STYLE['md_sim']['marker'], linestyle='--', linewidth=1.5, alpha=0.8, label='MD (sim subset)'),
-            targ_line
-        ])
+    custom_lines.append(targ_line)
 
     # Place one main legend at the top of the figure
-    ncols = len(custom_lines) // 2 + 1 if len(custom_lines) > 5 else len(custom_lines)
+    ncols = len(custom_lines)
     fig.legend(handles=custom_lines, loc='upper center', bbox_to_anchor=(0.5, 0.93), 
             ncol=ncols, frameon=False, fontsize=24)
 
     # Adjust layout to make room for the new suptitle and top legend
     plt.tight_layout(rect=[0.04, 0.04, 1, 0.90])
     plt.show()
+    return fig
+
+
+def plot_md_vs_msm_convergence():
+    """Plots direct-MD convergence time versus iMSM convergence time for all 15 NTR variants."""
+    (perms_all_md, _, _, _, _, _, perms_all_msm, _, _, _, _, _) = load_convergence_data()
+
+    min_convergence_factor = 0.5
+    max_convergence_factor = 2.0
+
+    md_convergences = np.zeros((len(radii), len(sites_list)))
+    msm_convergences = np.zeros((len(radii), len(sites_list)))
+
+    for i, radius in enumerate(radii):
+        for j, sites in enumerate(sites_list):
+            md_perms = perms_all_md[i, j, :]
+            msm_perms = perms_all_msm[i, j, :]
+            
+            md_perms_smooth = md_perms
+            msm_perms_smooth = np.zeros_like(msm_perms)
+            
+            for w in range(len(md_perms)):
+                msm_perms_smooth[w] = np.mean(msm_perms[: w + 1])
+            
+            final_md_perm = md_perms_smooth[-1]
+            final_msm_perm = msm_perms_smooth[-1]
+            
+            for k in range(len(subsets)):
+                if np.all(md_perms_smooth[k:] >= min_convergence_factor * final_md_perm) and \
+                   np.all(md_perms_smooth[k:] <= max_convergence_factor * final_md_perm):
+                    md_convergences[i, j] = total_simulation_times[k]
+                    break
+                    
+            for k in range(len(subsets)):
+                if np.all(msm_perms_smooth[k:] >= min_convergence_factor * final_msm_perm) and \
+                   np.all(msm_perms_smooth[k:] <= max_convergence_factor * final_msm_perm):
+                    msm_convergences[i, j] = total_simulation_times[k]
+                    break
+
+    fig, ax = plt.subplots(figsize=(8, 8), dpi=300)
+    
+    # Square plot with equal logarithmic axes
+    ax.set_xscale('log')
+    ax.set_yscale('log')
+    ax.set_xlim(30, 3000)
+    ax.set_ylim(30, 3000)
+    ax.set_aspect('equal')
+    
+    # Grid lines for both major and minor ticks
+    ax.grid(True, which='both', linestyle='--', alpha=0.3)
+    
+    # Plot identity line (y=x)
+    ax.plot([30, 3000], [30, 3000], color='gray', linestyle='--', linewidth=1.5, zorder=1)
+
+    # Plot speedup lines (y = S * x)
+    x_vals = np.logspace(np.log10(30), np.log10(3000), 100)
+    for s_val in [0.5, 2, 4, 8]:
+        y_vals = s_val * x_vals
+        valid = (y_vals <= 3000) & (y_vals >= 30)
+        if np.any(valid):
+            ax.plot(x_vals[valid], y_vals[valid], color='gray', linestyle=':', alpha=0.4, linewidth=1.5, zorder=1)
+            # Label speedup line
+            if s_val >= 1:
+                x_text = 2000 / s_val
+                y_text = 2000
+            else:
+                x_text = 2000
+                y_text = 2000 * s_val
+            
+            y_text_plot = y_text * 1.25
+            label_text = f'{s_val}x speedup'
+            if x_text >= 30 and y_text_plot >= 30:
+                ax.text(x_text, y_text_plot, label_text, rotation=45, color='gray', alpha=0.6, fontsize=15, ha='center', va='center')
+
+    # Color palette
+    colors = ['#440154', '#3b528b', '#21918c', '#5ec962', '#fde725'] # Viridis
+    const_size = 300
+    site_markers = {2: 'o', 4: 's', 6: '^'}
+
+    # Plot data points with jitter in log space
+    rng = np.random.default_rng(42)
+    for i, radius in enumerate(radii):
+        kda = kdas[i]
+        color = colors[i]
+        for j, sites in enumerate(sites_list):
+            x_val = msm_convergences[i, j]
+            y_val = md_convergences[i, j]
+            
+            # Add small log10-space jitter
+            x_jittered = x_val * (10 ** rng.uniform(-0.03, 0.03))
+            y_jittered = y_val * (10 ** rng.uniform(-0.03, 0.03))
+            
+            marker = site_markers[sites]
+            ax.scatter(x_jittered, y_jittered, s=const_size, color=color, marker=marker, edgecolors='black', alpha=0.85, zorder=3)
+
+    # Style axes
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.tick_params(axis='both', which='major', labelsize=21)
+    ax.tick_params(axis='both', which='minor', labelsize=15)
+    
+    ax.set_xlabel('iMSM Convergence Time (μs)', fontsize=20, labelpad=10)
+    ax.set_ylabel('MD Convergence Time (μs)', fontsize=20, labelpad=10)
+
+    # Legends: Both in the same legend box, side-by-side (2 columns) below the plot
+    hdr_sites = Line2D([0], [0], color='none', label=r'$\bf{Binding\ Sites}$')
+    hdr_kda = Line2D([0], [0], color='none', label=r'$\bf{Molecular\ Mass}$')
+    empty_handle = Line2D([0], [0], color='none', label='')
+
+    ms_legend = 10
+    col1 = [
+        hdr_sites,
+        Line2D([0], [0], marker='o', color='none', markerfacecolor='gray', markeredgecolor='black', markersize=ms_legend, label='2 sites'),
+        Line2D([0], [0], marker='s', color='none', markerfacecolor='gray', markeredgecolor='black', markersize=ms_legend, label='4 sites'),
+        Line2D([0], [0], marker='^', color='none', markerfacecolor='gray', markeredgecolor='black', markersize=ms_legend, label='6 sites'),
+        empty_handle,
+        empty_handle
+    ]
+
+    col2 = [hdr_kda]
+    for i, kda in enumerate(kdas):
+        color = colors[i]
+        col2.append(
+            Line2D([0], [0], marker='o', color='none', markerfacecolor=color, markeredgecolor='black', markersize=ms_legend, label=f'{kda:.1f} kDa')
+        )
+
+    # Concatenate columns directly since matplotlib legend is column-major by default
+    combined_handles = col1 + col2
+
+    ax.legend(
+        handles=combined_handles,
+        loc='upper center',
+        bbox_to_anchor=(0.5, -0.20),
+        ncol=2,
+        frameon=True,
+        fontsize=12,
+        columnspacing=2.0,
+        handletextpad=0.5
+    )
+
+    plt.tight_layout()
+    return fig
+
+
+def collect_perms_md_single_type_diameters(kap_coords_folder, n_sims, start_time, end_time, shorten_time_to, step_ns=100):
+    """
+    Count transport events from raw 3D kap coordinates.
+    
+    kap_coords_folder: path containing subfolders 1, 2, ..., n_sims,
+                       each with a file 'start_time-end_time.pickle' of shape (kap_amount, 3, n_frames).
+    step_ns: time per frame in nanoseconds (default 100 ns).
+    """
+    # Load and concatenate raw 3D coordinates across all simulations
+    all_coords = []
+    for sim_idx in range(1, n_sims + 1):
+        path = os.path.join(kap_coords_folder, str(sim_idx), f"{start_time}-{end_time}.pickle")
+        if not os.path.exists(path):
+            print(f"File not found: {path}")
+            continue
+        with open(path, "rb") as f:
+            coords = pickle.load(f)  # shape: (kap_amount, 3, n_frames)
+        all_coords.append(coords)
+
+    if not all_coords:
+        return 0, 0, 0, 0, 0
+
+    all_coords = np.concatenate(all_coords, axis=0)  # shape: (kap_amount * n_sims, 3, n_frames)
+
+    _, _, n_frames = all_coords.shape
+    time_us = n_frames * step_ns / 1000  # convert ns → µs
+
+    if shorten_time_to is not None:
+        if shorten_time_to > time_us:
+            # raise ValueError(f"shorten_time_to {shorten_time_to} µs is greater than trajectory length {time_us} µs")
+            n_frames_to_use = n_frames
+            time_us = time_us
+        else:
+            n_frames_to_use = int(shorten_time_to * 1000 / step_ns)
+            time_us = shorten_time_to
+        all_coords = all_coords[:, :, :n_frames_to_use]
+
+    # Count transport events across all kap trajectories
+    # z-axis is index 2 in the (kap_amount, 3, n_frames) array
+    total_full_transports = 0
+    n_trajs = all_coords.shape[0]
+    for i in range(n_trajs):
+        z = all_coords[i, 2, :]  # shape: (n_frames,)
+        last_side = None
+
+        for z_val in z:
+            if z_val >= 10:
+                current_side = 1   # cytoplasmic side (top)
+            elif z_val <= -10:
+                current_side = 0   # nuclear side (bottom)
+            else:
+                continue           # inside the channel, not yet committed
+
+            if last_side is None:
+                last_side = current_side   # initialise, don't count
+            elif last_side != current_side:
+                total_full_transports += 1
+                last_side = current_side
+
+    concentration_M = amount_to_concentration(100, box_side_a=800)
+    concentration_uM = concentration_M * 1e6
+            
+    time_s = time_us * 1e-6
+
+    lower, upper = poisson_confidence_interval(total_full_transports)
+    rate = total_full_transports / (time_s * n_sims)
+    lower_rate = lower / (time_s * n_sims)
+    upper_rate = upper / (time_s * n_sims)
+    permeability = rate / concentration_uM
+    lower_permeability = lower_rate / concentration_uM
+    upper_permeability = upper_rate / concentration_uM
+    return n_trajs, total_full_transports, permeability, lower_permeability, upper_permeability
+
+
+# Collect data
+def collect_perms_md_diameters(n_sites=None, radii=None, shorten_time_to=None):
+    results = []
+    for sites in n_sites:
+        for radius in radii:
+            for tunnel_diameter_nm in [46, 54, 62, 70]:
+                if tunnel_diameter_nm == 54:
+                    kap_coords_folder = f"data/ntr_variants/{sites}_{radius}_more/1_single_sim_kap_coords/"
+                    n_trajs, total_full_transports, permeability, lower_permeability, upper_permeability = collect_perms_md_single_type_diameters(kap_coords_folder, n_sims=30, start_time=10, end_time=70, shorten_time_to=shorten_time_to)
+                else:
+                    kap_coords_folder = f"data/ntr_variants_{tunnel_diameter_nm}R/{sites}_{radius}/1_single_sim_kap_coords/"
+                    n_trajs, total_full_transports, permeability, lower_permeability, upper_permeability = collect_perms_md_single_type_diameters(kap_coords_folder, n_sims=30, start_time=10, end_time=30, shorten_time_to=shorten_time_to)
+                
+                results.append({
+                    'sites': sites,
+                    'radius': radius,
+                    'kda': radius_a_to_kda(radius),
+                    'tunnel_diameter_nm': tunnel_diameter_nm,
+                    'total_transports': total_full_transports,
+                    'n_trajs': n_trajs,
+                    'permeability': permeability,
+                    'lower_permeability': lower_permeability if lower_permeability >=0 else 0,
+                    'upper_permeability': upper_permeability if upper_permeability >=0 else 0
+                })
+    return results
+
+
+def collect_perms_msm_diameters(n_sites=None, radii=None, n_clusters=320):
+    results = []
+    for sites in n_sites:
+        for radius in radii:
+            for tunnel_diameter_nm in [46, 54, 62, 70]:
+                path = None
+                if tunnel_diameter_nm == 54:
+                    path = f"data/ntr_variants/{sites}_{radius}_more/7_permeabilities_subsets/1.00fraction_simulations/0index/7_permeabilities.pickle"
+                else:
+                    path = f"data/ntr_variants_{tunnel_diameter_nm}R/{sites}_{radius}/7_permeabilities_subsets/1.00fraction/0index/7_permeabilities.pickle"
+                
+                if path and os.path.exists(path):
+                    with open(path, "rb") as f:
+                        perms_dict = pickle.load(f)
+                    permeability = perms_dict[n_clusters]
+                    results.append({
+                        'sites': sites,
+                        'radius': radius,
+                        'kda': radius_a_to_kda(radius),
+                        'tunnel_diameter_nm': tunnel_diameter_nm,
+                        'permeability': permeability
+                    })
+    return results
+
+
+def plot_permeability_pore_diameter_comparison():
+    n_sites = [2, 4, 6]
+    radii = [10, 14, 18, 22, 26]
+    md_results = collect_perms_md_diameters(n_sites=n_sites, radii=radii, shorten_time_to=20)
+    msm_results = collect_perms_msm_diameters(n_sites=n_sites, radii=radii, n_clusters=320)
+
+    # Convert the results list of dicts to Pandas DataFrames
+    df_md = pd.DataFrame(md_results)
+    df_msm = pd.DataFrame(msm_results)
+
+    # Get the unique site values and diameters
+    n_sites_list = sorted(df_md['sites'].unique())
+    diameters = sorted(df_md['tunnel_diameter_nm'].unique()) # [46, 54, 62, 70]
+
+    # Create a figure with 3 rows (Sites) and 4 columns (Diameters)
+    fig, axes = plt.subplots(3, 4, figsize=(18, 12), sharey=True, sharex=True)
+
+    color_cycle = plt.rcParams['axes.prop_cycle'].by_key()['color']
+    diameter_colors = {d: color_cycle[i] for i, d in enumerate(diameters)}
+
+    for row_idx, sites in enumerate(n_sites_list):
+        df_md_sites = df_md[df_md['sites'] == sites]
+        df_msm_sites = df_msm[df_msm['sites'] == sites]
+        
+        for col_idx, diameter in enumerate(diameters):
+            ax = axes[row_idx, col_idx]
+            color = diameter_colors[diameter]
+            
+            # --- MD Data ---
+            df_plot = df_md_sites[df_md_sites['tunnel_diameter_nm'] == diameter].sort_values('kda')
+            if not df_plot.empty:
+                x = df_plot['kda'].values
+                y = df_plot['permeability'].values
+                valid = y > 0
+                invalid = y == 0
+                
+                # Plot valid points (greater than 0 transport events)
+                if np.any(valid):
+                    x_v = x[valid]
+                    y_v = y[valid]
+                    yerr_l = np.maximum(0, y_v - df_plot['lower_permeability'].values[valid])
+                    yerr_u = np.maximum(0, df_plot['upper_permeability'].values[valid] - y_v)
+                    
+                    ax.errorbar(
+                        x_v, y_v,
+                        yerr=[yerr_l, yerr_u],
+                        marker='o',
+                        capsize=5,
+                        capthick=1.5,
+                        elinewidth=1.5,
+                        linestyle='none',
+                        color=color
+                    )
+                    
+                    if len(x_v) >= 2:
+                        x_fit, y_fit, _, _, _ = weighted_power_law_fit(x_v, y_v, y_err=None)
+                        ax.plot(x_fit, y_fit, linestyle='-', color=color, alpha=0.7)
+
+                # Plot invalid points (0 transport events) as upper limits
+                if np.any(invalid):
+                    x_inv = x[invalid]
+                    y_inv = df_plot['upper_permeability'].values[invalid]
+                    ax.errorbar(
+                        x_inv, y_inv,
+                        yerr=[y_inv, np.zeros_like(y_inv)],  # Lower error goes to 0, upper is 0
+                        marker='none',
+                        capsize=5,
+                        capthick=1.5,
+                        elinewidth=1.5,
+                        linestyle='none',
+                        color=color
+                    )
+
+            # --- MSM Data ---
+            df_msm_plot = df_msm_sites[df_msm_sites['tunnel_diameter_nm'] == diameter].sort_values('kda')
+            if not df_msm_plot.empty:
+                x_msm = df_msm_plot['kda'].values
+                y_msm = df_msm_plot['permeability'].values
+                valid_msm = y_msm > 0
+                if np.any(valid_msm):
+                    x_mv = x_msm[valid_msm]
+                    y_mv = y_msm[valid_msm]
+
+                    ax.plot(
+                        x_mv, y_mv,
+                        marker='s',
+                        linestyle='none',
+                        color=color
+                    )
+                    
+                    if len(x_mv) >= 2:
+                        x_fit_msm, y_fit_msm, _, _, _ = weighted_power_law_fit(x_mv, y_mv, y_err=None)
+                        ax.plot(x_fit_msm, y_fit_msm, linestyle='--', color=color, alpha=0.7)
+
+            # --- Formatting ---
+            ax.set_xscale('log')
+            ax.set_yscale('log')
+            ax.grid(True, linestyle='--', alpha=0.5)
+            
+            # Row labels on the y-axis of the first column
+            if col_idx == 0:
+                ax.set_ylabel(f'{sites} Sites\nPermeability', fontsize=16)
+            
+            # Column labels on the title of the first row
+            if row_idx == 0:
+                ax.set_title(f'{diameter} nm', fontsize=18)
+                
+            # X-axis label on the bottom row only
+            if row_idx == len(n_sites_list) - 1:
+                ax.set_xlabel('Molecular mass (kDa)', fontsize=16)
+
+    # Adjust x-axis across all columns
+    axes[0, 0].set_xlim(left=2.5)
+
+    # Add a global legend for MD and MSM markers/linestyles on the first plot
+    md_legend = Line2D([], [], color='gray', marker='o', linestyle='-', label='MD')
+    msm_legend = Line2D([], [], color='gray', marker='s', linestyle='--', label='MSM')
+    axes[0, 0].legend(handles=[md_legend, msm_legend], loc='lower left', fontsize=14)
+
+    plt.tight_layout()
     return fig

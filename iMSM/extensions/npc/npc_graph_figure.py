@@ -1,5 +1,6 @@
 import numpy as np
 import sys
+from typing import List, Optional, Union, Tuple
 import pickle
 from scipy.spatial import ConvexHull
 # import pygpcca
@@ -7,6 +8,8 @@ from scipy.stats import multivariate_normal, chi2
 from scipy.interpolate import splprep, splev
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
+from matplotlib.colors import LinearSegmentedColormap, Normalize
+from matplotlib.ticker import FuncFormatter
 # from adjustText import adjust_text
 from matplotlib.patches import Wedge, FancyBboxPatch
 import matplotlib.patches as patches
@@ -16,6 +19,7 @@ import itertools as it
 from iMSM.extensions.npc.npc_utils import get_sorted_anchor_coordinates, get_sorted_anchor_coordinates_np, infinitesimal_generator, stationary_distribution, radius_a_to_kda
 import iMSM.extensions.npc.npc_embed_cluster
 sys.modules['_013_PRC_clustering'] = iMSM.extensions.npc.npc_embed_cluster # fix for old file name
+import os
 
 ############################
 # CLUSTER ANALYSIS HELPERS #
@@ -190,7 +194,7 @@ def calc_non_spoke_cluster_makeup(cluster):
     nups = ['Nup2_08', 'Nup2_09', 'Nup2_10', 'Nup2_11', 'Nup2_12', 'Nup2_13', 'Nup2_14', 'Nup2_15', 'Nup60_08', 'Nup60_09', 'Nup60_10', 'Nup60_11', 'Nup60_12', 'Nup60_13', 'Nup60_14', 'Nup60_15', 'Nup2_00', 'Nup2_01', 'Nup2_02', 'Nup2_03', 'Nup2_04', 'Nup2_05', 'Nup2_06', 'Nup2_07', 'Nup60_00', 'Nup60_01', 'Nup60_02', 'Nup60_03', 'Nup60_04', 'Nup60_05', 'Nup60_06', 'Nup60_07', 'Nup1_00', 'Nup1_01', 'Nup1_02', 'Nup1_03', 'Nup1_04', 'Nup1_05', 'Nup1_06', 'Nup1_07', 'Nup145_00', 'Nup145_01', 'Nup145_02', 'Nup145_03', 'Nup145_04', 'Nup145_05', 'Nup145_06', 'Nup145_07', 'Nup49_24', 'Nup49_25', 'Nup49_26', 'Nup49_27', 'Nup49_28', 'Nup49_29', 'Nup49_30', 'Nup49_31', 'Nsp1_40', 'Nsp1_41', 'Nsp1_42', 'Nsp1_43', 'Nsp1_44', 'Nsp1_45', 'Nsp1_46', 'Nsp1_47', 'Nup49_16', 'Nup49_17', 'Nup49_18', 'Nup49_19', 'Nup49_20', 'Nup49_21', 'Nup49_22', 'Nup49_23', 'Nsp1_32', 'Nsp1_33', 'Nsp1_34', 'Nsp1_35', 'Nsp1_36', 'Nsp1_37', 'Nsp1_38', 'Nsp1_39', 'Nup57_24', 'Nup57_25', 'Nup57_26', 'Nup57_27', 'Nup57_28', 'Nup57_29', 'Nup57_30', 'Nup57_31', 'Nup145_08', 'Nup145_09', 'Nup145_10', 'Nup145_11', 'Nup145_12', 'Nup145_13', 'Nup145_14', 'Nup145_15', 'Nup57_16', 'Nup57_17', 'Nup57_18', 'Nup57_19', 'Nup57_20', 'Nup57_21', 'Nup57_22', 'Nup57_23', 'Nup57_00', 'Nup57_01', 'Nup57_02', 'Nup57_03', 'Nup57_04', 'Nup57_05', 'Nup57_06', 'Nup57_07', 'Nup57_08', 'Nup57_09', 'Nup57_10', 'Nup57_11', 'Nup57_12', 'Nup57_13', 'Nup57_14', 'Nup57_15', 'Nsp1_16', 'Nsp1_17', 'Nsp1_18', 'Nsp1_19', 'Nsp1_20', 'Nsp1_21', 'Nsp1_22', 'Nsp1_23', 'Nup49_00', 'Nup49_01', 'Nup49_02', 'Nup49_03', 'Nup49_04', 'Nup49_05', 'Nup49_06', 'Nup49_07', 'Nsp1_24', 'Nsp1_25', 'Nsp1_26', 'Nsp1_27', 'Nsp1_28', 'Nsp1_29', 'Nsp1_30', 'Nsp1_31', 'Nup49_08', 'Nup49_09', 'Nup49_10', 'Nup49_11', 'Nup49_12', 'Nup49_13', 'Nup49_14', 'Nup49_15', 'Nup100_00', 'Nup100_01', 'Nup100_02', 'Nup100_03', 'Nup100_04', 'Nup100_05', 'Nup100_06', 'Nup100_07', 'Nup159_00', 'Nup159_01', 'Nup159_02', 'Nup159_03', 'Nup159_04', 'Nup159_05', 'Nup159_06', 'Nup159_07', 'Nup100_08', 'Nup100_09', 'Nup100_10', 'Nup100_11', 'Nup100_12', 'Nup100_13', 'Nup100_14', 'Nup100_15', 'Nup159_08', 'Nup159_09', 'Nup159_10', 'Nup159_11', 'Nup159_12', 'Nup159_13', 'Nup159_14', 'Nup159_15', 'Nsp1_00', 'Nsp1_01', 'Nsp1_02', 'Nsp1_03', 'Nsp1_04', 'Nsp1_05', 'Nsp1_06', 'Nsp1_07', 'Nsp1_08', 'Nsp1_09', 'Nsp1_10', 'Nsp1_11', 'Nsp1_12', 'Nsp1_13', 'Nsp1_14', 'Nsp1_15', 'Nup116_00', 'Nup116_01', 'Nup116_02', 'Nup116_03', 'Nup116_04', 'Nup116_05', 'Nup116_06', 'Nup116_07', 'Nup116_08', 'Nup116_09', 'Nup116_10', 'Nup116_11', 'Nup116_12', 'Nup116_13', 'Nup116_14', 'Nup116_15']
 
     # defaultdict starting 0
-    makeup = {'nuc': 0.0, 'nuc_channel': 0.0, 'mid_channel': 0.0, 'Nup2': 0.0, 'Nup60': 0.0, 'Nup1': 0.0, 'Nup145': 0.0, 'Nup49': 0.0, 'Nup57': 0.0, 'Nsp1': 0.0, 'Nup100': 0.0, 'Nup159': 0.0, 'Nup116': 0.0, 'cyt_channel' : 0.0, 'cyt': 0.0}
+    makeup = {'nuc': 0.0, 'nuc_channel': 0.0, 'mid_channel': 0.0, 'Nup2': 0.0, 'Nup60': 0.0, 'Nup1': 0.0, 'Nup145': 0.0, 'Nup49': 0.0, 'Nup57': 0.0, 'Nsp1_cyt': 0.0, 'Nsp1_inner': 0.0, 'Nsp1': 0.0, 'Nup100': 0.0, 'Nup159': 0.0, 'Nup116': 0.0, 'cyt_channel' : 0.0, 'cyt': 0.0}
 
     # Iterate through each microstate index
     for i in range(458):
@@ -216,7 +220,16 @@ def calc_non_spoke_cluster_makeup(cluster):
             new_i -= 17 # Adjust index for fgs (i.e. remove nuc, nuc_channel, mid_channel)
         new_i //= 2 # adjust for nc
         nup = nups[new_i]
-        makeup[nup.split("_")[0]] += cluster[i]
+        split = nup.split("_")
+        nup_name = split[0]
+        if nup_name == "Nsp1":
+            layer = int(split[1]) // 8
+            if layer in [0, 1]:
+                makeup['Nsp1_cyt'] += cluster[i]
+            elif layer in [2, 3, 4, 5]:
+                makeup['Nsp1_inner'] += cluster[i]
+        else:
+            makeup[nup_name] += cluster[i]
         
     makeup = np.array(list(makeup.values()))
     makeup = makeup / np.sum(makeup)  # Normalize to sum to 1
@@ -769,6 +782,8 @@ PIE_COLORS_DICT = {'nuc': "#dddddd", # old = "#aeccdb"
                    'Nup145': "#a5a56e",
                    'Nup49': "#ca3335",
                    'Nup57': "#4320df",
+                   'Nsp1_cyt': "#df7f20",
+                   'Nsp1_inner': "#e84393",
                    'Nsp1': "#df7f20",
                    'Nup100': "#c8b6d2",
                    'Nup159': "#6a498e",
@@ -780,7 +795,7 @@ PIE_COLORS = list(PIE_COLORS_DICT.values())
 PIE_COLORS_LABELS = ['Nucleus'] + \
                     ['Unbound Channel (Nuc)'] + \
                     ['Unbound Channel (Mid)'] + \
-                    ['Nup2', 'Nup60', 'Nup1', 'Nup145', 'Nup49', 'Nup57', 'Nsp1', 'Nup100', 'Nup159', 'Nup116'] + \
+                    ['Nup2', 'Nup60', 'Nup1', 'Nup145', 'Nup49', 'Nup57', 'Nsp1_cyt', 'Nsp1_inner', 'Nsp1', 'Nup100', 'Nup159', 'Nup116'] + \
                     ['Unbound Channel (Cyt)'] + \
                     ['Cytoplasm']
 
@@ -978,7 +993,7 @@ def visualize_vector_field_mesostates(P, fig, ax, good_cluster_indices, mus, sho
         if show_colorbar_title:
             cbar.ax.set_title(r'Net Rate $\log_{10} (\frac{1}{\mu s})$', fontsize=14)
 
-def comparison_plot(base_tm_path, base_cluster_path, radii, n_sites, title, in_out_flow=None, ignored_nup_types=None, add_mini_titles=False, pie_scaling=15, min_rate=0.01, max_rate=5, time_step_us=5, show_scale_bars=True, swap_axes=False, use_actual_mus_path=None, dots_only=False):
+def comparison_plot(base_tm_path, base_cluster_path, radii, n_sites, title, in_out_flow=None, ignored_nup_types=None, add_mini_titles=False, pie_scaling=15, min_rate=0.01, max_rate=5, time_step_us=5, show_scale_bars=True, swap_axes=False, use_actual_mus_path=None, dots_only=False, add_nucleus_cytoplasm_text=True):
     n_samples = 2000
     
     # 1. Determine figure grid dimensions based on the swap_axes argument
@@ -1009,7 +1024,7 @@ def comparison_plot(base_tm_path, base_cluster_path, radii, n_sites, title, in_o
                 color_to_remove = PIE_COLORS_DICT[nup_type]
                 if color_to_remove in pie_colors:
                     pie_colors.remove(color_to_remove)
-
+ 
     for j_r, r in enumerate(radii):
         print("kda: ", radius_a_to_kda(r))
         for i_n, n in enumerate(n_sites):
@@ -1031,7 +1046,7 @@ def comparison_plot(base_tm_path, base_cluster_path, radii, n_sites, title, in_o
             ax.set_ylim(-40, 40)
             
             # This ensures 1 unit on x = 1 unit on y (isometric)
-            ax.set_aspect('equal')
+            ax.set_aspect('equal', adjustable='box')
             
             # hide axii and show scale bar
             hide_axii_and_show_scale_bar(ax, show_scale_bar=show_scale_bars, show_scale_text=False)
@@ -1046,7 +1061,7 @@ def comparison_plot(base_tm_path, base_cluster_path, radii, n_sites, title, in_o
                 continue
             
             good_mesostate_indices = list(range(len(clusters)))
-
+ 
             unprojected_mus = estimate_unprojected_mus(n_samples, clusters, coordinate_edges, good_mesostate_indices)
             good_mesostate_indices = pick_good_clusters_by_mu_angle(unprojected_mus, clusters, angle_threshold_degrees=92, angle_shift_degrees=0)
             if use_actual_mus_path is not None:
@@ -1055,12 +1070,834 @@ def comparison_plot(base_tm_path, base_cluster_path, radii, n_sites, title, in_o
                 mus = estimate_clusters_mu_2(actual_mus, good_mesostate_indices)
             else:
                 mus, covs = estimate_cluters_mu_cov(n_samples, clusters, coordinate_edges, good_mesostate_indices)
-
+ 
             
             # 3. Update colorbar logic to check the dynamic row/col index (top-right plot)
             show_colorbar = (row_idx == 0 and col_idx == fig_x - 1)  
             
             visualize_arrows_between_mesostates(P, fig, ax, good_mesostate_indices, mus, show_colorbar_title=False, in_out_flow=in_out_flow, show_colorbar=show_colorbar, min_rate=min_rate, max_rate=max_rate, time_step_us=time_step_us)
-            visualize_pie_mesostates(clusters, P, ax, good_mesostate_indices, mus, PIE_COLORS, add_nucleus_cytoplasm_text=True, pie_scaling=pie_scaling, dots_only=dots_only)
+            visualize_pie_mesostates(clusters, P, ax, good_mesostate_indices, mus, PIE_COLORS, add_nucleus_cytoplasm_text=add_nucleus_cytoplasm_text, pie_scaling=pie_scaling, dots_only=dots_only)
             add_npc_scaffold_picture(ax)
+            ax.set_aspect('equal', adjustable='box')
+    return fig
+
+
+def comparison_plot_custom(
+    tm_paths: List[str],
+    cluster_paths: List[str],
+    titles: List[str],
+    n_rows: int,
+    n_cols: int,
+    title: str,
+    in_out_flow: Optional[str],
+    ignored_nup_types: Optional[List[str]],
+    add_mini_titles: bool,
+    pie_scaling: float,
+    min_rate: float,
+    max_rate: float,
+    time_step_us: float,
+    show_scale_bars: bool,
+    use_actual_mus_paths: Optional[List[str]],
+    dots_only: bool,
+    add_nucleus_cytoplasm_text: bool = True,
+) -> plt.Figure:
+    n_samples: int = 2000
+    
+    plot_width: float = 10.0
+    plot_height: float = plot_width * (80.0 / 60.0)
+    
+    fig, axes = plt.subplots(
+        n_rows,
+        n_cols,
+        figsize=(plot_width * n_cols, plot_height * n_rows),
+        squeeze=False,
+        gridspec_kw={'wspace': 0.02, 'hspace': 0.02}
+    )
+    
+    fig.suptitle(title, fontsize=20, y=0.95)
+    
+    pie_colors: List[str] = PIE_COLORS
+    if ignored_nup_types is not None:
+        pie_colors = PIE_COLORS.copy()
+        for nup_type in ignored_nup_types:
+            if nup_type in PIE_COLORS_DICT:
+                color_to_remove: str = PIE_COLORS_DICT[nup_type]
+                if color_to_remove in pie_colors:
+                    pie_colors.remove(color_to_remove)
+                    
+    num_plots: int = len(tm_paths)
+    for idx in range(n_rows * n_cols):
+        row_idx: int = idx // n_cols
+        col_idx: int = idx % n_cols
+        ax = axes[row_idx, col_idx]
+        
+        if idx >= num_plots:
+            ax.axis('off')
+            continue
+            
+        if add_mini_titles and idx < len(titles):
+            ax.set_title(titles[idx], fontsize=14)
+            
+        ax.set_xlim(-30, 30)
+        ax.set_ylim(-40, 40)
+        ax.set_aspect('equal', adjustable='box')
+        
+        hide_axii_and_show_scale_bar(ax, show_scale_bar=show_scale_bars, show_scale_text=False)
+        
+        tm_path: str = tm_paths[idx]
+        cluster_path: str = cluster_paths[idx]
+        
+        try:
+            clusters, coordinate_edges, P, pca_cluster = load_cluster_data(tm_path=tm_path, cluster_path=cluster_path)
+        except Exception as e:
+            print(f"Could not load data for path {tm_path}: {e}")
+            continue
+            
+        good_mesostate_indices: List[int] = list(range(len(clusters)))
+        
+        unprojected_mus: np.ndarray = estimate_unprojected_mus(n_samples, clusters, coordinate_edges, good_mesostate_indices)
+        good_mesostate_indices = pick_good_clusters_by_mu_angle(unprojected_mus, clusters, angle_threshold_degrees=92, angle_shift_degrees=0)
+        
+        mus: np.ndarray
+        if use_actual_mus_paths is not None and idx < len(use_actual_mus_paths):
+            use_actual_mus_path: str = use_actual_mus_paths[idx]
+            with open(use_actual_mus_path, "rb") as f:
+                actual_mus: np.ndarray = pickle.load(f)
+            mus = estimate_clusters_mu_2(actual_mus, good_mesostate_indices)
+        else:
+            covs: np.ndarray
+            mus, covs = estimate_cluters_mu_cov(n_samples, clusters, coordinate_edges, good_mesostate_indices)
+            
+        show_colorbar: bool = (row_idx == 0 and col_idx == n_cols - 1)
+        
+        visualize_arrows_between_mesostates(P, fig, ax, good_mesostate_indices, mus, show_colorbar_title=False, in_out_flow=in_out_flow, show_colorbar=show_colorbar, min_rate=min_rate, max_rate=max_rate, time_step_us=time_step_us)
+        visualize_pie_mesostates(clusters, P, ax, good_mesostate_indices, mus, pie_colors, add_nucleus_cytoplasm_text=add_nucleus_cytoplasm_text, pie_scaling=pie_scaling, dots_only=dots_only)
+        add_npc_scaffold_picture(ax)
+        ax.set_aspect('equal', adjustable='box')
+        
+    return fig
+
+
+
+
+
+def comparison_vertical_plot(
+    tm_paths: List[str],
+    cluster_paths: List[str],
+    titles: List[str],
+    n_rows: int = 1,
+    n_cols: int = 4,
+    spoke_index: int = 0,
+    time_step_us: float = 5.0,
+    pie_scaling: float = 12.0,
+    min_rate: float = 0.001,
+    connect_threshold: float = 0.05,
+    save_path: Optional[str] = None,
+    title: Optional[str] = None,
+    neighbor_only: bool = False,
+    rate_based_thickness: bool = False,
+    xlim: Optional[Tuple[float, float]] = None,
+    color_by: Union[str, List[str]] = "nup",
+    show_arrows: Union[bool, List[bool]] = True,
+    show_stationary_dist: Union[bool, List[bool]] = True,
+    arrow_opacity: Union[float, List[float]] = 1.0,
+    legend_bbox_to_anchor: Optional[Tuple[float, float]] = None,
+    show_colorbar: bool = True,
+    legend_nup_bbox_to_anchor: Optional[Tuple[float, float]] = None,
+    legend_nup_ncol: int = 4,
+    colorbar_fraction: float = 0.046,
+    colorbar_pad: Optional[float] = None,
+    show_pore_residency: Union[bool, List[bool]] = False,
+    show_y_axis: bool = True,
+    legend_ncol: Optional[int] = None
+) -> plt.Figure:
+    num_plots = len(tm_paths)
+    plot_data = []
+    
+    def to_list(val, default_val):
+        if isinstance(val, list):
+            if len(val) < num_plots:
+                val = val + [default_val] * (num_plots - len(val))
+            return val
+        return [val] * num_plots
+
+    color_by_list = to_list(color_by, "nup")
+    show_arrows_list = to_list(show_arrows, True)
+    show_stationary_dist_list = to_list(show_stationary_dist, True)
+    arrow_opacity_list = to_list(arrow_opacity, 1.0)
+    show_pore_residency_list = to_list(show_pore_residency, False)
+    
+    def get_standard_rate(i_idx, j_idx, states_list, pi_array, Q_matrix):
+        state_i = states_list[i_idx]
+        state_j = states_list[j_idx]
+        numerator = sum(pi_array[a] * sum(Q_matrix[a, b] for b in state_j['indices']) for a in state_i['indices'])
+        denominator = sum(pi_array[a] for a in state_i['indices'])
+        return numerator / denominator if denominator > 0 else 0.0
+
+    def get_rate(i_idx, j_idx, states_list, pi_array, Q_matrix):
+        if neighbor_only:
+            if abs(j_idx - i_idx) != 1:
+                return 0.0
+            if j_idx == i_idx - 1:  # going down
+                return sum(get_standard_rate(i_idx, m, states_list, pi_array, Q_matrix) for m in range(i_idx))
+            if j_idx == i_idx + 1:  # going up
+                return sum(get_standard_rate(i_idx, m, states_list, pi_array, Q_matrix) for m in range(i_idx + 1, len(states_list)))
+        else:
+            return get_standard_rate(i_idx, j_idx, states_list, pi_array, Q_matrix)
+    
+    # 1. Process data for each path
+    for idx in range(num_plots):
+        tm_path = tm_paths[idx]
+        cluster_path = cluster_paths[idx]
+        
+        clusters, coordinate_edges, P, pca_cluster = load_cluster_data(tm_path=tm_path, cluster_path=cluster_path)
+        pi = stationary_distribution(P)
+        Q = infinitesimal_generator(P, dt=time_step_us)
+        
+        # Compute committors on clusters
+        n_clusters = P.shape[0]
+        idx_nuc = [i for i in range(n_clusters) if clusters[i][0] >= 0.75]
+        idx_cyt = [i for i in range(n_clusters) if clusters[i][-1] >= 0.75]
+        idx_trans = [i for i in range(n_clusters) if i not in idx_nuc and i not in idx_cyt]
+
+        I_C = np.eye(len(idx_trans)) if len(idx_trans) > 0 else np.array([])
+        P_C = P[np.ix_(idx_trans, idx_trans)] if len(idx_trans) > 0 else np.array([])
+        
+        # Nucleus committor
+        q_nuc = np.zeros(n_clusters)
+        for i in idx_nuc:
+            q_nuc[i] = 1.0
+        if len(idx_trans) > 0 and len(idx_nuc) > 0:
+            b_nuc = np.sum(P[np.ix_(idx_trans, idx_nuc)], axis=1)
+            try:
+                q_nuc_trans = np.linalg.solve(I_C - P_C, b_nuc)
+                q_nuc[idx_trans] = q_nuc_trans
+            except np.linalg.LinAlgError:
+                pass
+
+        # Cytoplasm committor
+        q_cyt = np.zeros(n_clusters)
+        for i in idx_cyt:
+            q_cyt[i] = 1.0
+        if len(idx_trans) > 0 and len(idx_cyt) > 0:
+            b_cyt = np.sum(P[np.ix_(idx_trans, idx_cyt)], axis=1)
+            try:
+                q_cyt_trans = np.linalg.solve(I_C - P_C, b_cyt)
+                q_cyt[idx_trans] = q_cyt_trans
+            except np.linalg.LinAlgError:
+                pass
+        
+        # Map microstates to spokes
+        def get_microstate_spoke(m: int):
+            if m == 0 or m == 457:
+                return None
+            if 1 <= m <= 8:
+                return m - 1
+            if 225 <= m <= 232:
+                return m - 225
+            if 449 <= m <= 456:
+                return m - 449
+            adj = m - 9 if m < 225 else m - 17
+            return (adj // 2) % 8
+
+        # Pick clusters of interest dynamically
+        spoke_0_indices = []
+        for i, cluster in enumerate(clusters):
+            if not (cluster[0] >= 0.75 or cluster[-1] >= 0.75):
+                spoke_masses = np.zeros(8)
+                for m in range(1, 457):
+                    s = get_microstate_spoke(m)
+                    if s is not None:
+                        spoke_masses[s] += cluster[m]
+                if np.argmax(spoke_masses) == spoke_index:
+                    spoke_0_indices.append(i)
+                    
+        connected_bulk_indices = []
+        for i, cluster in enumerate(clusters):
+            if cluster[0] >= 0.75 or cluster[-1] >= 0.75:
+                connected_bulk_indices.append(i)
+                    
+        good_cluster_indices = spoke_0_indices + connected_bulk_indices
+        
+        # Calculate Z centroids (X is 0)
+        n_samples = 2000
+        mus = []
+        for idx_c in good_cluster_indices:
+            cluster = clusters[idx_c]
+            spatial_coordinates = sample_from_cluster(cluster, n_samples, coordinate_edges)
+            z_coords = spatial_coordinates[:, 2]
+            mus.append(np.array([0.0, np.mean(z_coords)]))
+        mus = np.array(mus)
+        
+        # Initialize list of states to be merged
+        states = []
+        safe_pi_for_indices = np.array([pi[c] if c < len(pi) else 0.0 for c in good_cluster_indices])
+        scaled_pi = np.power(safe_pi_for_indices, 1/3)
+        radii = scaled_pi * pie_scaling
+        radii = np.clip(radii, 1.2, 3.2)
+        
+        for i, idx_c in enumerate(good_cluster_indices):
+            cluster = clusters[idx_c]
+            rads = calc_non_spoke_cluster_makeup(cluster)
+            is_nuc = rads[0] > 0.75
+            is_cyt = rads[-1] > 0.75
+            
+            center_pos = mus[i].copy()
+            if is_nuc:
+                center_pos[1] = -35.0
+            elif is_cyt:
+                center_pos[1] = 35.0
+                
+            states.append({
+                'indices': [idx_c],
+                'pi': pi[idx_c] if idx_c < len(pi) else 0.0,
+                'center': center_pos,
+                'radius': radii[i],
+                'makeups': [cluster],
+                'makeup': cluster,
+                'is_nuc': is_nuc,
+                'is_cyt': is_cyt
+            })
+            
+        while True:
+            n_states = len(states)
+            max_overlap = -1.0
+            pair_to_merge = None
+            
+            for i in range(n_states):
+                for j in range(i + 1, n_states):
+                    dist = np.linalg.norm(states[i]['center'] - states[j]['center'])
+                    overlap = (states[i]['radius'] + states[j]['radius']) - dist
+                    if overlap > 0 and overlap > max_overlap:
+                        max_overlap = overlap
+                        pair_to_merge = (i, j)
+                        
+            if pair_to_merge is None:
+                break
+                
+            i, j = pair_to_merge
+            s_i = states[i]
+            s_j = states[j]
+            
+            total_pi = s_i['pi'] + s_j['pi']
+            new_center = (s_i['center'] * s_i['pi'] + s_j['center'] * s_j['pi']) / total_pi
+            
+            new_is_nuc = s_i['is_nuc'] or s_j['is_nuc']
+            new_is_cyt = s_i['is_cyt'] or s_j['is_cyt']
+            
+            new_makeups = s_i['makeups'] + s_j['makeups']
+            if new_is_nuc:
+                new_makeup = np.zeros_like(s_i['makeup'])
+                new_makeup[0] = 1.0
+            elif new_is_cyt:
+                new_makeup = np.zeros_like(s_i['makeup'])
+                new_makeup[-1] = 1.0
+            else:
+                new_makeup = np.mean(new_makeups, axis=0)
+                new_makeup = new_makeup / np.sum(new_makeup)
+            
+            new_indices = s_i['indices'] + s_j['indices']
+            new_radius = np.clip(np.power(total_pi, 1/3) * pie_scaling, 1.2, 3.2)
+            
+            new_state = {
+                'indices': new_indices,
+                'pi': total_pi,
+                'center': new_center,
+                'radius': new_radius,
+                'makeups': new_makeups,
+                'makeup': new_makeup,
+                'is_nuc': new_is_nuc,
+                'is_cyt': new_is_cyt
+            }
+            
+            states.pop(j)
+            states.pop(i)
+            states.append(new_state)
+            
+        states.sort(key=lambda s: s['center'][1])
+        
+        plot_data.append({
+            'states': states,
+            'pi': pi,
+            'Q': Q,
+            'q_nuc': q_nuc,
+            'q_cyt': q_cyt
+        })
+        
+    # 2. Find unified label_col_x and max_rate_all across all subplots
+    global_max_x_mid = 0.0
+    max_rate_all = -np.inf
+    for idx, data in enumerate(plot_data):
+        states = data['states']
+        pi = data['pi']
+        Q = data['Q']
+        if not show_arrows_list[idx]:
+            continue
+        for i in range(len(states)):
+            for j in range(len(states)):
+                if i == j:
+                    continue
+                rate = get_rate(i, j, states, pi, Q)
+                
+                if (abs(j - i) == 1) if neighbor_only else (rate > min_rate):
+                    if rate > max_rate_all:
+                        max_rate_all = rate
+                
+                if (abs(j - i) == 1) if neighbor_only else (rate > 0.05):
+                    p1 = states[i]['center']
+                    p2 = states[j]['center']
+                    dy = p2[1] - p1[1]
+                    abs_diff = abs(j - i)
+                    rad_val = 0.08 + 0.075 * abs_diff
+                    x_mid = 0.5 * rad_val * abs(dy)
+                    if x_mid > global_max_x_mid:
+                        global_max_x_mid = x_mid
+
+    if global_max_x_mid == 0.0:
+        global_max_x_mid = 4.0
+    label_col_x = global_max_x_mid + 3.5
+
+    effective_min_rate = min_rate if min_rate > 0.0 else 1e-4
+    if max_rate_all <= effective_min_rate:
+        max_rate_all = effective_min_rate * 10.0
+
+    custom_gray_cmap = LinearSegmentedColormap.from_list(
+        'custom_gray', 
+        [plt.cm.Greys(0.0), plt.cm.Greys(1.0)]
+    )
+    transitions_norm = Normalize(vmin=np.log10(effective_min_rate), vmax=np.log10(max_rate_all))
+    
+    # 3. Figure Setup
+    y_min, y_max = -40.0, 40.0
+    if rate_based_thickness:
+        half_width = global_max_x_mid + 1.5
+        xlim_left = -half_width
+        xlim_right = half_width
+    else:
+        half_width = label_col_x + 1.8
+        xlim_left = -half_width - 1.5
+        xlim_right = half_width + 3.0
+        
+    if xlim is not None:
+        xlim_left, xlim_right = xlim
+        
+    data_width = xlim_right - xlim_left
+    data_height = y_max - y_min
+    
+    fig_height = 20.0
+    single_plot_width = fig_height * (data_width / data_height)
+    
+    fig, axes = plt.subplots(
+        n_rows,
+        n_cols,
+        figsize=(single_plot_width * n_cols, fig_height * n_rows),
+        squeeze=False
+    )
+    
+    if title is not None:
+        fig.suptitle(title, fontsize=49, y=0.98)
+        
+    for idx in range(n_rows * n_cols):
+        row_idx = idx // n_cols
+        col_idx = idx % n_cols
+        ax = axes[row_idx, col_idx]
+        
+        if idx >= num_plots:
+            ax.axis('off')
+            continue
+            
+        ax.set_xlim(xlim_left, xlim_right)
+        ax.set_ylim(y_min, y_max)
+        ax.set_yticks([-40, -20, 0, 20, 40])
+        ax.set_aspect('equal', adjustable='box')
+        ax.set_xlabel('', fontsize=63)
+        
+        # Only show Y-axis label and ticks on the first column to avoid redundancy, and only if show_y_axis is True
+        if col_idx == 0 and show_y_axis:
+            ax.set_ylabel('Z (nm)', fontsize=63)
+            ax.tick_params(axis='y', which='major', labelsize=54)
+        else:
+            ax.set_ylabel('')
+            ax.tick_params(axis='y', which='both', left=False, labelleft=False)
+            
+        ax.tick_params(axis='x', which='both', bottom=False, labelbottom=False)
+        ax.set_xticks([])
+        
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        if col_idx > 0 or not show_y_axis:
+            ax.spines['left'].set_visible(False)
+        ax.grid(True, linestyle='--', alpha=0.3)
+        
+        data = plot_data[idx]
+        states = data['states']
+        pi = data['pi']
+        Q = data['Q']
+        q_nuc = data['q_nuc']
+        q_cyt = data['q_cyt']
+        
+        if idx < len(titles):
+            title_text = titles[idx]
+            if show_pore_residency_list[idx]:
+                pore_res_val = sum(s['pi'] for s in states if not (s['is_nuc'] or s['is_cyt'])) * 8
+                title_text += f"\nResidency: {pore_res_val * 100:.1f}%"
+            ax.set_title(title_text, fontsize=49)
+        
+        # Draw states
+        circles = []
+        for i, state in enumerate(states):
+            center_x, center_y = state['center']
+            radius = state['radius']
+            cluster = state['makeup']
+            rads = calc_non_spoke_cluster_makeup(cluster)
+            
+            if rads[0] > 0.75 or rads[-1] > 0.75:
+                if color_by_list[idx] == "committor":
+                    color = '#66c2a5' if rads[0] > 0.75 else '#fc8d62'
+                    edgecolor = 'white'
+                else:
+                    color = 'white'
+                    edgecolor = 'white'
+                center_y = -35 if rads[0] > 0.75 else 35
+                state['center'][1] = center_y
+                circle = plt.Circle((center_x, center_y), radius=radius, facecolor=color, edgecolor=edgecolor, linewidth=1, zorder=5)
+                ax.add_patch(circle)
+                circles.append(circle)
+                text_str = 'Nucleus' if rads[0] > 0.75 else 'Cytoplasm'
+                ax.text(center_x, center_y, text_str[0], fontsize=54, color='black', ha='center', va='center', zorder=6)
+            else:
+                c_patch = plt.Circle((center_x, center_y), radius=radius, facecolor='none', edgecolor='none', zorder=0)
+                ax.add_patch(c_patch)
+                circles.append(c_patch)
+                
+                if color_by_list[idx] == "committor":
+                    valid_indices = [c for c in state['indices'] if c < len(q_nuc) and c < len(pi)]
+                    if len(valid_indices) > 0 and sum(pi[c] for c in valid_indices) > 0:
+                        state_q_nuc = sum(pi[c] * q_nuc[c] for c in valid_indices) / sum(pi[c] for c in valid_indices)
+                        state_q_cyt = sum(pi[c] * q_cyt[c] for c in valid_indices) / sum(pi[c] for c in valid_indices)
+                    else:
+                        state_q_nuc = 0.0
+                        state_q_cyt = 0.0
+                    
+                    q_sum = state_q_nuc + state_q_cyt
+                    if q_sum > 0:
+                        state_q_nuc /= q_sum
+                        state_q_cyt /= q_sum
+                    else:
+                        state_q_nuc = 0.5
+                        state_q_cyt = 0.5
+                    
+                    theta_start = 0.0
+                    for frac, col in [(state_q_cyt, '#fc8d62'), (state_q_nuc, '#66c2a5')]:
+                        if frac == 0:
+                            continue
+                        wedge = Wedge(center=(center_x, center_y),
+                                      r=radius,
+                                      theta1=theta_start * 360,
+                                      theta2=(theta_start + frac) * 360,
+                                      facecolor=col,
+                                      edgecolor='white',
+                                      linewidth=0.5,
+                                      alpha=1.0,
+                                      zorder=5)
+                        ax.add_patch(wedge)
+                        theta_start += frac
+                else:
+                    if color_by_list[idx] == "type":
+                        glfg_color = '#ff4d4d'
+                        fsfg_color = '#1e90ff'
+                        
+                        rads_transformed = np.zeros(7)
+                        rads_transformed[0] = rads[0]
+                        rads_transformed[1] = rads[1]
+                        rads_transformed[2] = rads[2]
+                        
+                        nup100 = rads[12]
+                        nup116 = rads[14]
+                        nup49 = rads[7]
+                        nup57 = rads[8]
+                        nup145 = rads[6]
+                        nsp1_parts = rads[9] + rads[10] + rads[11]
+                        nup1_part = rads[5]
+                        
+                        glfg_sum = nup100 + nup116 + nup49 + nup57 + nup145 + nsp1_parts * 0.3273 + nup1_part * 0.3475
+                        
+                        nup159 = rads[13]
+                        nup60 = rads[4]
+                        nup2 = rads[3]
+                        
+                        fsfg_sum = nup159 + nup60 + nup2 + nsp1_parts * 0.6727 + nup1_part * 0.6525
+                        
+                        rads_transformed[3] = glfg_sum
+                        rads_transformed[4] = fsfg_sum
+                        rads_transformed[5] = rads[15]
+                        rads_transformed[6] = rads[16]
+                        
+                        colors_to_use = [PIE_COLORS[0], PIE_COLORS[1], PIE_COLORS[2], glfg_color, fsfg_color, PIE_COLORS[15], PIE_COLORS[16]]
+                        
+                        rads_for_sort = rads_transformed
+                        colors_for_sort = colors_to_use
+                    elif color_by_list[idx] == "z":
+                        z_makeup = np.zeros(3)
+                        anchor_coordinates = get_sorted_anchor_coordinates()
+                        nups = ['Nup2_08', 'Nup2_09', 'Nup2_10', 'Nup2_11', 'Nup2_12', 'Nup2_13', 'Nup2_14', 'Nup2_15', 'Nup60_08', 'Nup60_09', 'Nup60_10', 'Nup60_11', 'Nup60_12', 'Nup60_13', 'Nup60_14', 'Nup60_15', 'Nup2_00', 'Nup2_01', 'Nup2_02', 'Nup2_03', 'Nup2_04', 'Nup2_05', 'Nup2_06', 'Nup2_07', 'Nup60_00', 'Nup60_01', 'Nup60_02', 'Nup60_03', 'Nup60_04', 'Nup60_05', 'Nup60_06', 'Nup60_07', 'Nup1_00', 'Nup1_01', 'Nup1_02', 'Nup1_03', 'Nup1_04', 'Nup1_05', 'Nup1_06', 'Nup1_07', 'Nup145_00', 'Nup145_01', 'Nup145_02', 'Nup145_03', 'Nup145_04', 'Nup145_05', 'Nup145_06', 'Nup145_07', 'Nup49_24', 'Nup49_25', 'Nup49_26', 'Nup49_27', 'Nup49_28', 'Nup49_29', 'Nup49_30', 'Nup49_31', 'Nsp1_40', 'Nsp1_41', 'Nsp1_42', 'Nsp1_43', 'Nsp1_44', 'Nsp1_45', 'Nsp1_46', 'Nsp1_47', 'Nup49_16', 'Nup49_17', 'Nup49_18', 'Nup49_19', 'Nup49_20', 'Nup49_21', 'Nup49_22', 'Nup49_23', 'Nsp1_32', 'Nsp1_33', 'Nsp1_34', 'Nsp1_35', 'Nsp1_36', 'Nsp1_37', 'Nsp1_38', 'Nsp1_39', 'Nup57_24', 'Nup57_25', 'Nup57_26', 'Nup57_27', 'Nup57_28', 'Nup57_29', 'Nup57_30', 'Nup57_31', 'Nup145_08', 'Nup145_09', 'Nup145_10', 'Nup145_11', 'Nup145_12', 'Nup145_13', 'Nup145_14', 'Nup145_15', 'Nup57_16', 'Nup57_17', 'Nup57_18', 'Nup57_19', 'Nup57_20', 'Nup57_21', 'Nup57_22', 'Nup57_23', 'Nup57_00', 'Nup57_01', 'Nup57_02', 'Nup57_03', 'Nup57_04', 'Nup57_05', 'Nup57_06', 'Nup57_07', 'Nup57_08', 'Nup57_09', 'Nup57_10', 'Nup57_11', 'Nup57_12', 'Nup57_13', 'Nup57_14', 'Nup57_15', 'Nsp1_16', 'Nsp1_17', 'Nsp1_18', 'Nsp1_19', 'Nsp1_20', 'Nsp1_21', 'Nsp1_22', 'Nsp1_23', 'Nup49_00', 'Nup49_01', 'Nup49_02', 'Nup49_03', 'Nup49_04', 'Nup49_05', 'Nup49_06', 'Nup49_07', 'Nsp1_24', 'Nsp1_25', 'Nsp1_26', 'Nsp1_27', 'Nsp1_28', 'Nsp1_29', 'Nsp1_30', 'Nsp1_31', 'Nup49_08', 'Nup49_09', 'Nup49_10', 'Nup49_11', 'Nup49_12', 'Nup49_13', 'Nup49_14', 'Nup49_15', 'Nup100_00', 'Nup100_01', 'Nup100_02', 'Nup100_03', 'Nup100_04', 'Nup100_05', 'Nup100_06', 'Nup100_07', 'Nup159_00', 'Nup159_01', 'Nup159_02', 'Nup159_03', 'Nup159_04', 'Nup159_05', 'Nup159_06', 'Nup159_07', 'Nup100_08', 'Nup100_09', 'Nup100_10', 'Nup100_11', 'Nup100_12', 'Nup100_13', 'Nup100_14', 'Nup100_15', 'Nup159_08', 'Nup159_09', 'Nup159_10', 'Nup159_11', 'Nup159_12', 'Nup159_13', 'Nup159_14', 'Nup159_15', 'Nsp1_00', 'Nsp1_01', 'Nsp1_02', 'Nsp1_03', 'Nsp1_04', 'Nsp1_05', 'Nsp1_06', 'Nsp1_07', 'Nsp1_08', 'Nsp1_09', 'Nsp1_10', 'Nsp1_11', 'Nsp1_12', 'Nsp1_13', 'Nsp1_14', 'Nsp1_15', 'Nup116_00', 'Nup116_01', 'Nup116_02', 'Nup116_03', 'Nup116_04', 'Nup116_05', 'Nup116_06', 'Nup116_07', 'Nup116_08', 'Nup116_09', 'Nup116_10', 'Nup116_11', 'Nup116_12', 'Nup116_13', 'Nup116_14', 'Nup116_15']
+                        for i in range(458):
+                            if i in [0, 457] or (1 <= i <= 8) or (225 <= i <= 232) or (449 <= i <= 456):
+                                continue
+                            new_i = i
+                            if i < 225:
+                                new_i -= 9
+                            else:
+                                new_i -= 17
+                            new_i //= 2
+                            nup_anchor = nups[new_i]
+                            z = anchor_coordinates[nup_anchor][2]
+                            if z < -5.0:
+                                z_makeup[0] += cluster[i]
+                            elif z > 5.0:
+                                z_makeup[2] += cluster[i]
+                            else:
+                                z_makeup[1] += cluster[i]
+                        rads_for_sort = list(z_makeup)
+                        colors_for_sort = ['#C040B0', '#40BF89', '#FFD255']
+                    else:
+                        rads_for_sort = rads
+                        colors_for_sort = PIE_COLORS
+                    
+                    if color_by_list[idx] == "type":
+                        exclude_indices = {0, 1, 2, 5, 6}
+                    elif color_by_list[idx] == "z":
+                        exclude_indices = set()
+                    else:
+                        exclude_indices = {0, 1, 2, 15, 16}
+
+                    
+                    theta_start = 0.0
+                    paired = sorted(zip(rads_for_sort, colors_for_sort, list(range(len(rads_for_sort)))), reverse=True)
+                    rads_sorted, colors_sorted, indexes_sorted = map(list, zip(*paired))
+                    for frac, col, j in zip(rads_sorted, colors_sorted, indexes_sorted):
+                        if frac == 0:
+                            continue
+                        if j in exclude_indices:
+                            continue
+                        wedge = Wedge(center=(center_x, center_y),
+                                      r=radius,
+                                      theta1=theta_start * 360,
+                                      theta2=(theta_start + frac) * 360,
+                                      facecolor=col,
+                                      edgecolor='white',
+                                      linewidth=0.5,
+                                      alpha=1.0,
+                                      zorder=5)
+                        ax.add_patch(wedge)
+                        theta_start += frac
+                    
+            circle_border = plt.Circle((center_x, center_y), radius=radius, facecolor='none', edgecolor='black', linewidth=1.5, zorder=7)
+            ax.add_patch(circle_border)
+            
+            # Show stationary distribution number if specified
+            if show_stationary_dist_list[idx]:
+                pi_str = f"{state['pi'] * 100:.1f}%"
+                ax.text(center_x + radius + 0.6, center_y, pi_str, fontsize=53, ha='left', va='center', color='#1d4ed8',
+                        bbox=dict(boxstyle="round,pad=0.1", fc="white", ec="none", alpha=0.85))
+        
+        # Collect active transitions for overlap resolution
+        active_transitions = []
+        if show_arrows_list[idx]:
+            for i in range(len(states)):
+                for j in range(len(states)):
+                    if i == j:
+                        continue
+                    rate = get_rate(i, j, states, pi, Q)
+                    
+                    if (abs(j - i) == 1) if neighbor_only else (rate > min_rate):
+                        p1 = states[i]['center']
+                        p2 = states[j]['center']
+                        d = p2 - p1
+                        dist = np.linalg.norm(d)
+                        if dist == 0:
+                            continue
+                        active_transitions.append({
+                            'i': i,
+                            'j': j,
+                            'p1': p1,
+                            'p2': p2,
+                            'rate': rate,
+                            'diff': j - i,
+                            'y_mid': (p1[1] + p2[1]) / 2.0
+                        })
+                    
+        # Helper to resolve overlaps along Y axis
+        def resolve_overlaps(y_coords, min_dist=4.0, max_iter=1000):
+            y = np.array(y_coords, dtype=float)
+            n = len(y)
+            if n <= 1:
+                return y
+            idx = np.argsort(y)
+            y_sorted = y[idx]
+            for _ in range(max_iter):
+                moved = False
+                for i in range(n - 1):
+                    d = y_sorted[i+1] - y_sorted[i]
+                    if d < min_dist:
+                        overlap = min_dist - d
+                        y_sorted[i] -= overlap * 0.5
+                        y_sorted[i+1] += overlap * 0.5
+                        moved = True
+                if not moved:
+                    break
+            y_out = np.zeros_like(y)
+            y_out[idx] = y_sorted
+            return y_out
+
+        left_trans = [t for t in active_transitions if t['diff'] < 0]
+        right_trans = [t for t in active_transitions if t['diff'] > 0]
+        
+        if left_trans:
+            y_left_adj = resolve_overlaps([t['y_mid'] for t in left_trans])
+            for t, y in zip(left_trans, y_left_adj):
+                t['y_label'] = y
+                
+        if right_trans:
+            y_right_adj = resolve_overlaps([t['y_mid'] for t in right_trans])
+            for t, y in zip(right_trans, y_right_adj):
+                t['y_label'] = y
+
+        for t in left_trans + right_trans:
+            i, j = t['i'], t['j']
+            p1, p2 = t['p1'], t['p2']
+            diff = t['diff']
+            rate = t['rate']
+            y_mid = t['y_mid']
+            y_label = t['y_label']
+            
+            abs_diff = abs(diff)
+            rad_val = 0.08 + 0.05 * abs_diff
+            rad = rad_val
+            
+            if rate_based_thickness:
+                clipped_rate = np.clip(rate, effective_min_rate, max_rate_all)
+                log_min = np.log10(effective_min_rate)
+                log_max = np.log10(max_rate_all)
+                lw = 1.0 + 7.0 * (np.log10(clipped_rate) - log_min) / (log_max - log_min)
+                mutation_scale = 4.0 + 14.0 * (np.log10(clipped_rate) - log_min) / (log_max - log_min)
+                alpha = (0.25 + 0.65 * (np.log10(clipped_rate) - log_min) / (log_max - log_min)) * arrow_opacity_list[idx]
+                color = custom_gray_cmap(transitions_norm(np.log10(clipped_rate)))
+            else:
+                lw = 4.0
+                mutation_scale = 12.0
+                alpha = 0.8 * arrow_opacity_list[idx]
+                color = 'black'
+                
+            arrow = patches.FancyArrowPatch(
+                posA=(p1[0], p1[1]),
+                posB=(p2[0], p2[1]),
+                patchA=circles[i],
+                patchB=circles[j],
+                arrowstyle=f"-|>,head_width=1.2,head_length=2.4",
+                connectionstyle=f"arc3,rad={rad}",
+                mutation_scale=mutation_scale,
+                color=color,
+                alpha=alpha,
+                lw=lw,
+                shrinkA=1.0,
+                shrinkB=1.0,
+                zorder=4
+            )
+            ax.add_patch(arrow)
+            
+            x_mid = 0.5 * rad * (p2[1] - p1[1])
+            
+            if not rate_based_thickness:
+                if diff > 0:
+                    text_x = label_col_x + 2.5
+                    text_color = 'white'
+                    box_fc = "#cc7043"
+                    box_ec = "#b35a2b"
+                else:
+                    text_x = -label_col_x
+                    text_color = 'white'
+                    box_fc = "#4a6fa5"
+                    box_ec = "#3b5984"
+                
+                ax.plot([x_mid, text_x], [y_mid, y_label], color='gray', linestyle='--', linewidth=2.0, zorder=3)
+                
+                if rate < 0.001:
+                    rate_str = f"{rate:.1e}"
+                else:
+                    rate_str = f"{rate:.3f}"
+                    if rate_str.startswith("0."):
+                        rate_str = rate_str[1:]
+                ax.text(text_x, y_label, rate_str, color=text_color, fontsize=41, ha='center', va='center',
+                        zorder=8, bbox=dict(boxstyle="round,pad=0.15", fc=box_fc, ec=box_ec, lw=0.8, alpha=0.9))
+                        
+    if show_colorbar and rate_based_thickness and any(show_arrows_list):
+        active_axes = [axes[i // n_cols, i % n_cols] for i in range(num_plots) if show_arrows_list[i]]
+        if active_axes:
+            sm = plt.cm.ScalarMappable(cmap=custom_gray_cmap, norm=transitions_norm)
+            sm.set_array([])
+            pos = active_axes[-1].get_position()
+            cbar_pad = colorbar_pad if colorbar_pad is not None else (0.02 if n_rows == 1 else 0.01)
+            cbar_width = colorbar_fraction * (pos.x1 - pos.x0)
+            cbar_ax = fig.add_axes([pos.x1 + cbar_pad, pos.y0, cbar_width, pos.y1 - pos.y0])
+            cbar = fig.colorbar(sm, cax=cbar_ax)
+            cbar.ax.set_ylabel(r'transition rate ($\mu\mathrm{s}^{-1}$)', fontsize=54)
+            cbar.ax.tick_params(labelsize=45)
+            
+            def log_tick_formatter(val, pos):
+                if abs(val - round(val)) < 1e-9:
+                    return f"$10^{{{int(round(val))}}}$"
+                return f"$10^{{{val:.1f}}}$"
+            cbar.ax.yaxis.set_major_formatter(FuncFormatter(log_tick_formatter))
+        
+    legend_handles = []
+    if any(cb == "type" for cb in color_by_list):
+        glfg_patch = patches.Patch(color='#ff4d4d', label='GLFG')
+        fsfg_patch = patches.Patch(color='#1e90ff', label='FSFG')
+        legend_handles.extend([glfg_patch, fsfg_patch])
+    if any(cb == "z" for cb in color_by_list):
+        z_nuc_patch = patches.Patch(color='#C040B0', label='Nup anchor Z < -5 nm')
+        z_mid_patch = patches.Patch(color='#40BF89', label='-5 to 5 nm')
+        z_cyt_patch = patches.Patch(color='#FFD255', label='Nup anchor Z > 5 nm')
+        legend_handles.extend([z_nuc_patch, z_mid_patch, z_cyt_patch])
+    if any(cb == "committor" for cb in color_by_list):
+        cyt_patch = patches.Patch(color='#fc8d62', label='Committor to Cytoplasm')
+        nuc_patch = patches.Patch(color='#66c2a5', label='Committor to Nucleus')
+        legend_handles.extend([cyt_patch, nuc_patch])
+    if any(show_stationary_dist_list):
+        stat_box = patches.Patch(facecolor='white', edgecolor='#1d4ed8', linewidth=1.5, label='Stationary Probability')
+        legend_handles.append(stat_box)
+
+    if legend_handles:
+        bbox = legend_bbox_to_anchor if legend_bbox_to_anchor is not None else ((0.05, 0.96) if n_rows == 1 else (0.05, 0.95))
+        ncol = legend_ncol if legend_ncol is not None else len(legend_handles)
+        fig.legend(handles=legend_handles, loc='upper left', bbox_to_anchor=bbox, fontsize=36, ncol=ncol)
+        
+    if any(cb == "nup" for cb in color_by_list):
+        fig.subplots_adjust(bottom=0.15)
+        nup_handles = []
+        nup_colors = []
+        for k in range(3, 15):
+            if PIE_COLORS_LABELS[k] == 'Nsp1':
+                continue
+            patch = patches.Patch(color=PIE_COLORS[k], label=PIE_COLORS_LABELS[k])
+            nup_handles.append(patch)
+            nup_colors.append(PIE_COLORS[k])
+        nup_bbox = legend_nup_bbox_to_anchor if legend_nup_bbox_to_anchor is not None else ((0.5, 0.12) if n_rows == 1 else (0.5, 0.05))
+        nup_legend = fig.legend(
+            handles=nup_handles,
+            loc='upper center',
+            bbox_to_anchor=nup_bbox,
+            fontsize=36,
+            ncol=legend_nup_ncol,
+            frameon=False
+        )
+        for i, text in enumerate(nup_legend.get_texts()):
+            text.set_color(nup_colors[i])
+            text.set_weight("bold")
+                    
+    if save_path is not None:
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        fig.savefig(save_path, bbox_inches='tight', dpi=300)
+        
     return fig

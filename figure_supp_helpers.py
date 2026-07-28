@@ -8,6 +8,7 @@ import importlib
 import scipy
 from matplotlib.lines import Line2D
 import matplotlib.ticker as mtick
+import matplotlib.colors as mcolors
 from pygam import LinearGAM, s
 import scipy.stats as st
 from scipy.interpolate import pchip_interpolate
@@ -160,5 +161,128 @@ def plot_implied_timescales():
     plt.tight_layout()
 
     # Display the plot
+    plt.show()
+    return fig
+
+
+def plot_committor_vs_z(
+    z_nuc: float,
+    z_cyt: float
+) -> plt.Figure:
+    """
+    Computes the committor probability to reach Cytoplasm before Nucleus
+    dependent on the Z value of the state, and plots the results across
+    3 subplots (one for each number of sites: 2, 4, 6) with custom diameter/radius colors.
+    """
+    def get_variant_color(
+        diameter: int,
+        radius: float,
+        min_r: float,
+        max_r: float,
+    ) -> tuple[float, float, float]:
+        diam_colors: dict[int, str] = {
+            46: "#1f77b4",  # blue
+            54: "#ff7f0e",  # orange
+            62: "#2ca02c",  # green
+            70: "#d62728"   # red
+        }
+        base_hex: str = diam_colors.get(diameter, "#7f7f7f")
+        base_rgb: np.ndarray = np.array(mcolors.to_rgb(base_hex))
+        frac: float = (radius - min_r) / (max_r - min_r)
+        light_rgb: np.ndarray = 0.4 * base_rgb + 0.6 * np.array([1.0, 1.0, 1.0])
+        dark_rgb: np.ndarray = 0.7 * base_rgb + 0.3 * np.array([0.0, 0.0, 0.0])
+        interpolated_rgb: np.ndarray = light_rgb + frac * (dark_rgb - light_rgb)
+        return (float(interpolated_rgb[0]), float(interpolated_rgb[1]), float(interpolated_rgb[2]))
+
+    def compute_committor(tm: np.ndarray, z_vals: np.ndarray) -> np.ndarray:
+        n_states: int = tm.shape[0]
+        idx_cyt: np.ndarray = np.where(z_vals >= z_cyt)[0]
+        idx_trans: np.ndarray = np.where((z_vals > z_nuc) & (z_vals < z_cyt))[0]
+        
+        q: np.ndarray = np.zeros(n_states)
+        q[idx_cyt] = 1.0
+        
+        if len(idx_trans) > 0:
+            I_C: np.ndarray = np.eye(len(idx_trans))
+            P_C: np.ndarray = tm[np.ix_(idx_trans, idx_trans)]
+            b: np.ndarray = np.sum(tm[np.ix_(idx_trans, idx_cyt)], axis=1)
+            try:
+                q_trans: np.ndarray = np.linalg.solve(I_C - P_C, b)
+                q[idx_trans] = q_trans
+            except np.linalg.LinAlgError:
+                pass
+        return q
+
+    # Apply style ticks & no background color
+    sns.set_theme(style="ticks", font_scale=1.5)
+    fig, axes = plt.subplots(1, 3, figsize=(18, 6), sharey=True)
+    fig.patch.set_facecolor('none')
+
+    sites_list: list[int] = [2, 4, 6]
+    radii: list[int] = [10, 14, 18, 22, 26]
+    configs: list[tuple[str, int, str]] = [
+        ("ntr_variants_46R", 46, ""),
+        ("ntr_variants", 54, "_more"),
+        ("ntr_variants_62R", 62, ""),
+        ("ntr_variants_70R", 70, ""),
+    ]
+
+    plotted_diams_per_ax: dict[int, set[int]] = {0: set(), 1: set(), 2: set()}
+
+    for ax_idx, sites in enumerate(sites_list):
+        ax: plt.Axes = axes[ax_idx]
+        ax.set_title(f"{sites} Sites", fontsize=16, fontweight="bold")
+        ax.set_xlabel("Z Coordinate (Å)", fontsize=14)
+        if ax_idx == 0:
+            ax.set_ylabel("Committor to Cytoplasm", fontsize=14)
+        
+        # Style clean background
+        sns.despine(ax=ax)
+        ax.set_facecolor('none')
+        
+        for dir_name, diameter, suffix in configs:
+            for radius in radii:
+                fraction_dir: str = "1.00fraction_simulations" if diameter == 54 else "1.00fraction"
+                tm_path: str = f"data/{dir_name}/{sites}_{radius}{suffix}/6_transition_matrices_subsets/{fraction_dir}/0index/320clusters.pickle"
+                clustering_path: str = f"data/{dir_name}/{sites}_{radius}{suffix}/5_clustering_subsets/{fraction_dir}/0index/320clusters.pickle"
+                
+                if not os.path.exists(tm_path) or not os.path.exists(clustering_path):
+                    continue
+                    
+                with open(tm_path, "rb") as f:
+                    tm: np.ndarray = pickle.load(f)
+                with open(clustering_path, "rb") as f:
+                    clustering: Any = pickle.load(f)
+                    
+                z_vals: np.ndarray = clustering.centroids_z_actual.flatten()
+                q: np.ndarray = compute_committor(tm, z_vals)
+                
+                color: tuple[float, float, float] = get_variant_color(
+                    diameter=diameter,
+                    radius=float(radius),
+                    min_r=10.0,
+                    max_r=26.0,
+                )
+                
+                sort_idx: np.ndarray = np.argsort(z_vals)
+                
+                label: str | None = f"{diameter} nm" if diameter not in plotted_diams_per_ax[ax_idx] else None
+                plotted_diams_per_ax[ax_idx].add(diameter)
+                
+                ax.plot(z_vals[sort_idx], q[sort_idx], color=color, linewidth=2.5, linestyle="-", label=label)
+
+        # Vertical boundary lines
+        ax.axvline(x=z_nuc, color="gray", linestyle=":", linewidth=1.5, alpha=0.5)
+        ax.axvline(x=z_cyt, color="gray", linestyle=":", linewidth=1.5, alpha=0.5)
+        
+        # Sort legend handles to keep them consistent (46, 54, 62, 70)
+        handles, labels = ax.get_legend_handles_labels()
+        if handles:
+            sorted_pairs = sorted(zip(handles, labels), key=lambda x: int(x[1].split()[0]))
+            shandles, slabels = zip(*sorted_pairs)
+            ax.legend(shandles, slabels, title="NPC Diameter", loc="best", frameon=False)
+        ax.grid(True, linestyle="--", alpha=0.3)
+
+    plt.tight_layout()
     plt.show()
     return fig

@@ -193,7 +193,15 @@ def visualize_stationary_distribution(base_tm_path, base_clustering_path, base_c
     for key in stationary_per_layer.keys():
         split = key.split("_")
         nup = split[0] if split[0] not in ["nuc", "cyt", "mid"] else key
-        colors.append(PIE_COLORS_DICT[nup])
+        color_key = key
+        if key in ["Nsp1_0", "Nsp1_1"]:
+            color_key = "Nsp1_cyt"
+        elif key in ["Nsp1_2", "Nsp1_3", "Nsp1_4", "Nsp1_5"]:
+            color_key = "Nsp1_inner"
+        if color_key in PIE_COLORS_DICT:
+            colors.append(PIE_COLORS_DICT[color_key])
+        else:
+            colors.append(PIE_COLORS_DICT[nup])
         labels.append(nup)
 
     jsd = jensenshannon(
@@ -496,10 +504,10 @@ def plot_free_energy_grid(n_sites_list, r_list, paths, include_mid_channel=False
             ax.spines['right'].set_visible(False)
             
             if i == 0:
-                ax.set_title(f'{kdas_list[j]:.1f} kDa', fontsize=18, pad=10)
+                ax.set_title(f'{kdas_list[j]:.1f} kDa', fontsize=25, pad=10)
 
             if j == 0:
-                ax.set_ylabel(f'{n_sites} Sites', fontsize=22, labelpad=10)
+                ax.set_ylabel(f'{n_sites} Sites', fontsize=30, labelpad=10)
             
             # Formatting ticks
             ax.tick_params(axis='y', left=False, labelsize=0)
@@ -507,45 +515,54 @@ def plot_free_energy_grid(n_sites_list, r_list, paths, include_mid_channel=False
             if i == len(n_sites_list) - 1:
                 # Set xlabel on the middle-ish plot of the bottom row
                 if j == len(r_list) // 2: 
-                    ax.set_xlabel(r'$\Delta$ Free Energy (kT)', fontsize=20, labelpad=10)
-                ax.tick_params(axis='x', labelsize=18)
+                    ax.set_xlabel(r'$\Delta$ Free Energy (kT)', fontsize=28, labelpad=10)
+                ax.tick_params(axis='x', labelsize=25)
             else:
-                ax.tick_params(axis='x', bottom=False, labelsize=18)
+                ax.tick_params(axis='x', bottom=False, labelsize=25)
                 
             ax.set_xlim(0, 11)  # You may need to adjust this max limit now that the curve starts at 0
             ax.set_xticks([0, 3, 6, 9])
 
     # Global elements
-    fig.legend(loc='upper center', bbox_to_anchor=(0.5, 0.96), 
-               ncol=2, fontsize=18, frameon=False)
-    fig.suptitle(title, fontsize=18, y=1.02)
+    fig.legend(loc='upper center', bbox_to_anchor=(0.5, 0.99), 
+               ncol=2, fontsize=25, frameon=False)
+    fig.suptitle(title, fontsize=25, y=1.02)
     
     return fig, axes
     
 def plot_js(js_divergences, kdas_list, n_sites_list):    
-    fig, ax = plt.subplots(figsize=(10, 6))
+    fig, ax = plt.subplots(figsize=(11, 7))
+    js_labels = np.empty_like(js_divergences, dtype=object)
+    for i in range(js_divergences.shape[0]):
+        for j in range(js_divergences.shape[1]):
+            val = js_divergences[i, j]
+            if val < 0.01:
+                js_labels[i, j] = "<0.01"
+            else:
+                js_labels[i, j] = f"{val:.2f}"
+                
     sns.heatmap(js_divergences, 
-                annot=True, 
-                fmt='.4f', 
+                annot=js_labels, 
+                fmt='', 
                 cmap='Reds',
                 vmin = 0,
                 vmax = 0.5,
                 xticklabels=[f'{kda:.1f}' for kda in kdas_list],
                 yticklabels=[f'{n} Sites' for n in n_sites_list],
                 cbar_kws={'label': 'JS Divergence'},
-                annot_kws={'fontsize': 18},
+                annot_kws={'fontsize': 24},
                 ax=ax)
 
-    ax.set_xlabel('Molecular Mass (kDa)', fontsize=26, labelpad=20)
+    ax.set_xlabel('Molecular Mass (kDa)', fontsize=35, labelpad=20)
     # ax.set_ylabel('Number of interaction sites', fontsize=26, labelpad=20)
 
     # Set tick label fontsize
-    ax.tick_params(axis='both', labelsize=20)
+    ax.tick_params(axis='both', labelsize=27)
 
     # Set colorbar label fontsize
     cbar = ax.collections[0].colorbar
-    cbar.ax.tick_params(labelsize=20)
-    cbar.set_label('JS Divergence', fontsize=26, labelpad=20)
+    cbar.ax.tick_params(labelsize=27)
+    cbar.set_label('JS Divergence', fontsize=30, labelpad=20)
 
     plt.tight_layout()
     # plt.savefig('js_divergence_heatmap.png', dpi=300, bbox_inches='tight')
@@ -553,29 +570,35 @@ def plot_js(js_divergences, kdas_list, n_sites_list):
     return fig
     
 def plot_wd(wassersteins, kdas_list, n_sites_list):
-    fig, ax = plt.subplots(figsize=(10, 6))
+    fig, ax = plt.subplots(figsize=(11, 7))
+    wd_labels = np.empty_like(wassersteins, dtype=object)
+    for i in range(wassersteins.shape[0]):
+        for j in range(wassersteins.shape[1]):
+            val = wassersteins[i, j]
+            wd_labels[i, j] = f"{val:.1f}"
+            
     sns.heatmap(wassersteins, 
-                annot=True, 
-                fmt='.4f', 
+                annot=wd_labels, 
+                fmt='', 
                 cmap='Reds',
                 # vmin = 0,
                 # vmax = 0.5,
                 xticklabels=[f'{kda:.1f}' for kda in kdas_list],
                 yticklabels=[f'{n} Sites' for n in n_sites_list],
                 cbar_kws={'label': 'Wasserstein Distance'},
-                annot_kws={'fontsize': 18},
+                annot_kws={'fontsize': 24},
                 ax=ax)
 
-    ax.set_xlabel('Molecular Mass (kDa)', fontsize=26, labelpad=20)
+    ax.set_xlabel('Molecular Mass (kDa)', fontsize=35, labelpad=20)
     # ax.set_ylabel('Number of interaction sites', fontsize=26, labelpad=20)
 
     # Set tick label fontsize
-    ax.tick_params(axis='both', labelsize=20)
+    ax.tick_params(axis='both', labelsize=27)
 
     # Set colorbar label fontsize
     cbar = ax.collections[0].colorbar
-    cbar.ax.tick_params(labelsize=20)
-    cbar.set_label('Wasserstein Distance (nm)', fontsize=26, labelpad=20)
+    cbar.ax.tick_params(labelsize=27)
+    cbar.set_label('Wasserstein\nDistance (nm)', fontsize=30, labelpad=20)
 
     plt.tight_layout()
     # plt.savefig('js_divergence_heatmap.png', dpi=300, bbox_inches='tight')
@@ -605,3 +628,135 @@ def plot_js_wd():
     js_fig = plot_js(js_divergences, kdas_list, n_sites_list)
     wd_fig = plot_wd(wassersteins, kdas_list, n_sites_list)
     return js_fig, wd_fig
+
+def plot_initiator_nups(base_tm_path, base_clustering_path):
+    import numpy as np
+    import matplotlib.pyplot as plt
+    import pickle
+    import os
+
+    n_sites_list = [4, 6]
+    r = 26
+    n_sims = 10  # Number of successful transport trajectories to simulate per variant
+
+    fig, axes = plt.subplots(2, 2, figsize=(14, 12), sharey=True)
+
+    nup_names = ['Nup2', 'Nup60', 'Nup1', 'Nup145', 'Nup49', 'Nsp1', 'Nup57', 'Nup100', 'Nup159', 'Nup116']
+
+    for col_idx, n_sites in enumerate(n_sites_list):
+        tm_path = base_tm_path.replace("#r#", str(r)).replace("#n#", str(n_sites))
+        clustering_path = base_clustering_path.replace("#r#", str(r)).replace("#n#", str(n_sites))
+
+        with open(tm_path, "rb") as f:
+            P = pickle.load(f)
+        with open(clustering_path, "rb") as f:
+            clustering = pickle.load(f)
+
+        centers = clustering.get_inverse_centers() # (320, 458)
+        
+        # Calculate Nup layered makeup for all clusters
+        cluster_makeups = []
+        for c in range(P.shape[0]):
+            makeup = calc_non_spoke_cluster_makeup_layered(centers[c])
+            cluster_makeups.append(makeup)
+
+        # Find reservoirs
+        nuc_comps = [m['nuc'] for m in cluster_makeups]
+        cyt_comps = [m['cyt'] for m in cluster_makeups]
+        nuc_res = np.argmax(nuc_comps)
+        cyt_res = np.argmax(cyt_comps)
+
+        # We also define the FG compositions of all clusters
+        # Mapping 32 layered states to the 10 FG Nups
+        fg_compositions = []
+        for makeup in cluster_makeups:
+            fg_comp = {nup: 0.0 for nup in nup_names}
+            # Sum layers for each Nup type
+            fg_comp['Nup2'] = makeup.get('Nup2_0', 0.0) + makeup.get('Nup2_1', 0.0)
+            fg_comp['Nup60'] = makeup.get('Nup60_0', 0.0) + makeup.get('Nup60_1', 0.0)
+            fg_comp['Nup1'] = makeup.get('Nup1_0', 0.0)
+            fg_comp['Nup145'] = makeup.get('Nup145_0', 0.0) + makeup.get('Nup145_1', 0.0)
+            fg_comp['Nup49'] = (makeup.get('Nup49_0', 0.0) + makeup.get('Nup49_1', 0.0) +
+                                makeup.get('Nup49_2', 0.0) + makeup.get('Nup49_3', 0.0))
+            fg_comp['Nsp1'] = (makeup.get('Nsp1_0', 0.0) + makeup.get('Nsp1_1', 0.0) +
+                               makeup.get('Nsp1_2', 0.0) + makeup.get('Nsp1_3', 0.0) +
+                               makeup.get('Nsp1_4', 0.0) + makeup.get('Nsp1_5', 0.0))
+            fg_comp['Nup57'] = (makeup.get('Nup57_0', 0.0) + makeup.get('Nup57_1', 0.0) +
+                                makeup.get('Nup57_2', 0.0) + makeup.get('Nup57_3', 0.0))
+            fg_comp['Nup100'] = makeup.get('Nup100_0', 0.0) + makeup.get('Nup100_1', 0.0)
+            fg_comp['Nup159'] = makeup.get('Nup159_0', 0.0) + makeup.get('Nup159_1', 0.0)
+            fg_comp['Nup116'] = makeup.get('Nup116_0', 0.0) + makeup.get('Nup116_1', 0.0)
+            
+            # Renormalize to sum to 1
+            total = sum(fg_comp.values())
+            if total > 0.0:
+                for nup in fg_comp:
+                    fg_comp[nup] /= total
+            fg_compositions.append(fg_comp)
+
+        # Define reservoir sets using 0.95 threshold
+        nuc_states = {c for c, m in enumerate(cluster_makeups) if m['nuc'] >= 0.95}
+        cyt_states = {c for c, m in enumerate(cluster_makeups) if m['cyt'] >= 0.95}
+
+        # Simulation function
+        def run_sim_set(start_states, target_states, initial_state):
+            initiator_profiles = []
+            while len(initiator_profiles) < n_sims:
+                curr = initial_state
+                path_first_interacting = None
+                while True:
+                    # Transition to next state
+                    curr = np.random.choice(P.shape[0], p=P[curr, :])
+                    if curr in target_states:
+                        if path_first_interacting is not None:
+                            initiator_profiles.append(fg_compositions[path_first_interacting])
+                        break
+                    elif curr in start_states:
+                        path_first_interacting = None  # Reset path
+                    else:
+                        # Check if it is an interacting state (has FG component)
+                        if path_first_interacting is None:
+                            # if sum of FG components in the makeup of curr is significant
+                            fg_sum = sum(cluster_makeups[curr][k] for k in cluster_makeups[curr] if k not in ['nuc', 'cyt', 'nuc_channel', 'cyt_channel', 'mid_channel'])
+                            if fg_sum > 0.1:
+                                path_first_interacting = curr
+            # Average the profiles
+            avg_profile = {nup: 0.0 for nup in nup_names}
+            for profile in initiator_profiles:
+                for nup in nup_names:
+                    avg_profile[nup] += profile[nup]
+            for nup in nup_names:
+                avg_profile[nup] /= len(initiator_profiles)
+            return avg_profile
+
+        # Nuclear Entry (Nuc -> Cyt transport)
+        nuc_to_cyt_profile = run_sim_set(nuc_states, cyt_states, nuc_res)
+        # Cytoplasmic Entry (Cyt -> Nuc transport)
+        cyt_to_nuc_profile = run_sim_set(cyt_states, nuc_states, cyt_res)
+
+        # Plot Nuc -> Cyt in row 0 (Nuclear Entry)
+        ax_n2c = axes[0, col_idx]
+        vals_n2c = [nuc_to_cyt_profile[nup] for nup in nup_names]
+        colors_n2c = [PIE_COLORS_DICT.get(nup, '#7f7f7f') for nup in nup_names]
+        ax_n2c.bar(nup_names, vals_n2c, color=colors_n2c, edgecolor='black', linewidth=0.5)
+        ax_n2c.set_title(f"{n_sites} Sites - Nuclear Entry", fontsize=25)
+        ax_n2c.set_xticklabels(nup_names, rotation=45, ha='right', fontsize=22.5)
+        ax_n2c.tick_params(axis='y', labelsize=22.5)
+        ax_n2c.grid(axis='y', linestyle='--', alpha=0.7)
+
+        # Plot Cyt -> Nuc in row 1 (Cytoplasmic Entry)
+        ax_c2n = axes[1, col_idx]
+        vals_c2n = [cyt_to_nuc_profile[nup] for nup in nup_names]
+        colors_c2n = [PIE_COLORS_DICT.get(nup, '#7f7f7f') for nup in nup_names]
+        ax_c2n.bar(nup_names, vals_c2n, color=colors_c2n, edgecolor='black', linewidth=0.5)
+        ax_c2n.set_title(f"{n_sites} Sites - Cytoplasmic Entry", fontsize=25)
+        ax_c2n.set_xticklabels(nup_names, rotation=45, ha='right', fontsize=22.5)
+        ax_c2n.tick_params(axis='y', labelsize=22.5)
+        ax_c2n.grid(axis='y', linestyle='--', alpha=0.7)
+
+    axes[0, 0].set_ylabel("Initiator Nup Fraction", fontsize=26.25)
+    axes[1, 0].set_ylabel("Initiator Nup Fraction", fontsize=26.25)
+
+    plt.suptitle("Comparison of Initiator Nup Composition (r = 26 Å)", fontsize=32, y=1.02)
+    plt.tight_layout()
+    return fig
