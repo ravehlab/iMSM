@@ -64,7 +64,8 @@ fig.savefig(save_path + ".png", bbox_inches='tight', dpi=300)
 # %% panel d
 fig = plot_initiator_nups(
     base_tm_path=f"data/ntr_variants/#n#_#r#_more/6_transition_matrices_subsets/1.00fraction_simulations/0index/{320}clusters.pickle",
-    base_clustering_path=f"data/ntr_variants/#n#_#r#_more/5_clustering_subsets/1.00fraction_simulations/0index/{320}clusters.pickle"
+    base_clustering_path=f"data/ntr_variants/#n#_#r#_more/5_clustering_subsets/1.00fraction_simulations/0index/{320}clusters.pickle",
+    normalize_by_mass=False
 )
 save_path = "/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/plots/figure_2/panel_d"
 os.makedirs(os.path.dirname(save_path), exist_ok=True)
@@ -85,8 +86,8 @@ cluster_paths = [
 
 titles = ["4 Sites", "6 Sites"]
 
-# Panel e1 (color by Z, show arrows, hide stationary dist, show pore residency)
-fig_e1 = comparison_vertical_plot(
+# Panel e (color by Z, show arrows, hide stationary dist, show pore residency)
+fig_e = comparison_vertical_plot(
     tm_paths=tm_paths,
     cluster_paths=cluster_paths,
     titles=titles,
@@ -105,16 +106,18 @@ fig_e1 = comparison_vertical_plot(
     color_by="z",
     show_arrows=True,
     show_stationary_dist=False,
-    legend_bbox_to_anchor=(0.05, 1.04),
+    legend_bbox_to_anchor=(0.5, 1.05),
     show_pore_residency=True,
     legend_ncol=2
 )
-save_path_e1 = "/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/plots/figure_2/panel_e1"
-os.makedirs(os.path.dirname(save_path_e1), exist_ok=True)
-fig_e1.savefig(save_path_e1 + ".png", bbox_inches='tight', dpi=300)
+save_path_e = "/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/plots/figure_2/panel_e"
+os.makedirs(os.path.dirname(save_path_e), exist_ok=True)
+fig_e.savefig(save_path_e + ".png", bbox_inches='tight', dpi=300)
 
-# Panel e2 (color by Type, show arrows with 25% opacity, hide stationary dist)
-fig_e2 = comparison_vertical_plot(
+# %% panel f
+
+# Panel f (color by Type, show arrows with 25% opacity, hide stationary dist)
+fig_f = comparison_vertical_plot(
     tm_paths=tm_paths,
     cluster_paths=cluster_paths,
     titles=titles,
@@ -134,17 +137,19 @@ fig_e2 = comparison_vertical_plot(
     show_arrows=True,
     arrow_opacity=0.25,
     show_stationary_dist=False,
-    legend_bbox_to_anchor=(0.05, 1.02),
+    legend_bbox_to_anchor=(0.5, 0.98),
     show_colorbar=False,
     show_y_axis=False,
     legend_ncol=1
 )
-save_path_e2 = "/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/plots/figure_2/panel_e2"
-os.makedirs(os.path.dirname(save_path_e2), exist_ok=True)
-fig_e2.savefig(save_path_e2 + ".png", bbox_inches='tight', dpi=300)
+save_path_f = "/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/plots/figure_2/panel_f"
+os.makedirs(os.path.dirname(save_path_f), exist_ok=True)
+fig_f.savefig(save_path_f + ".png", bbox_inches='tight', dpi=300)
 
-# Panel e3 (color by Committor, show arrows with 25% opacity, show stationary dist)
-fig_e3 = comparison_vertical_plot(
+# %% panel g
+
+# Panel g (color by Committor, show arrows with 25% opacity, show stationary dist)
+fig_g = comparison_vertical_plot(
     tm_paths=tm_paths,
     cluster_paths=cluster_paths,
     titles=titles,
@@ -164,13 +169,13 @@ fig_e3 = comparison_vertical_plot(
     show_arrows=True,
     arrow_opacity=0.25,
     show_stationary_dist=True,
-    legend_bbox_to_anchor=(0.05, 1.02),
+    legend_bbox_to_anchor=(0.5, 0.98),
     show_colorbar=False,
     show_y_axis=False,
-    legend_ncol=2
+    legend_ncol=1
 )
-save_path_e3 = "/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/plots/figure_2/panel_e3"
-os.makedirs(os.path.dirname(save_path_e3), exist_ok=True)
-fig_e3.savefig(save_path_e3 + ".png", bbox_inches='tight', dpi=300)
+save_path_g = "/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/plots/figure_2/panel_g"
+os.makedirs(os.path.dirname(save_path_g), exist_ok=True)
+fig_g.savefig(save_path_g + ".png", bbox_inches='tight', dpi=300)
 
 

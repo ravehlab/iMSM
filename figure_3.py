@@ -23,14 +23,15 @@ fig = comparison_plot(
     radii=[10,18,26],
     n_sites=[2,4,6],
     title='Comparison of transport graphs for 5us window size, 160 clusters, 56D',
-    min_rate=0.001,
+    min_rate=0.01,
     max_rate=10,
     time_step_us=5,
     in_out_flow=None,
     show_scale_bars=False,
     swap_axes=True,
     add_mini_titles=False,
-    add_nucleus_cytoplasm_text=False
+    add_nucleus_cytoplasm_text=True,
+    nucleus_cytoplasm_fontsize=36
 )
 save_path = "/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/plots/figure_3/panel_a"
 os.makedirs(os.path.dirname(save_path), exist_ok=True)

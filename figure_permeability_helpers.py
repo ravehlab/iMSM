@@ -46,8 +46,8 @@ sims_total_simulation_times = [subset * 30  * 60 for subset in sims_subsets]
 STYLE = {
     'md_time':  {'color': '#c0702f', 'marker': 'o', 'ms': 6, 'lw': 4.0, 'alpha': 0.6, 'zorder': 2},
     'msm_time': {'color': '#2f9acf', 'marker': 'o', 'ms': 6, 'lw': 4.0, 'alpha': 0.6, 'zorder': 4},
-    'md_sim':   {'color': '#a0522d', 'marker': 's', 'ms': 6, 'lw': 4.0, 'alpha': 0.6, 'zorder': 2},
-    'msm_sim':  {'color': '#2166ac', 'marker': 's', 'ms': 6, 'lw': 4.0, 'alpha': 0.6, 'zorder': 4},
+    'md_sim':   {'color': '#c0702f', 'marker': 'o', 'ms': 6, 'lw': 4.0, 'alpha': 0.6, 'zorder': 2},
+    'msm_sim':  {'color': '#2f9acf', 'marker': 'o', 'ms': 6, 'lw': 4.0, 'alpha': 0.6, 'zorder': 4},
 }
 
 STAR_Y_PERM = 10**-0.8
@@ -327,7 +327,7 @@ def plot_4_6_cmp():
             'msm': perms_all_msm_sim_subset,
             'style_md': STYLE['md_sim'],
             'style_msm': STYLE['msm_sim'],
-            'ratio_ls': '--'
+            'ratio_ls': '-'
         }
     ]
 
@@ -340,7 +340,10 @@ def plot_4_6_cmp():
 
     for i, sub in enumerate(subsets):
         x = sub['x']
-        title_suffix = f"({sub['title']})"
+        
+        # Row title on the left (20% larger: 22 -> 26, not bold)
+        axes[i, 0].annotate(sub['title'], xy=(-0.25, 0.5), xycoords='axes fraction', 
+                           fontsize=26, va='center', ha='right', rotation=90)
         
         # Data extraction for this specific row
         md_a, msm_a = sub['md'][r_idx, s_a_idx, :], sub['msm'][r_idx, s_a_idx, :]
@@ -352,7 +355,6 @@ def plot_4_6_cmp():
                                     sites_to_fitted_perms_lo[SITE_A][r_idx], sites_to_fitted_perms_hi[SITE_A][r_idx])
         plot_series(ax, x, md_a, sub['style_md'], 1, sub['md_lo'][r_idx, s_a_idx, :], sub['md_hi'][r_idx, s_a_idx, :])
         plot_series(ax, x, msm_a, sub['style_msm'], 1)
-        ax.set_title(f'{SITE_A} Sites {title_suffix}', fontsize=20)
         
         # --- Panel 2: Site B ---
         ax = axes[i, 1]
@@ -360,7 +362,6 @@ def plot_4_6_cmp():
                         sites_to_fitted_perms_lo[SITE_B][r_idx], sites_to_fitted_perms_hi[SITE_B][r_idx])
         plot_series(ax, x, md_b, sub['style_md'], 1, sub['md_lo'][r_idx, s_b_idx, :], sub['md_hi'][r_idx, s_b_idx, :])
         plot_series(ax, x, msm_b, sub['style_msm'], 1)
-        ax.set_title(f'{SITE_B} Sites {title_suffix}', fontsize=20)
         
         # --- Panel 3: Ratio (A / B) ---
         ax = axes[i, 2]
@@ -369,8 +370,12 @@ def plot_4_6_cmp():
         plot_series(ax, x, get_ratio(msm_a, msm_b), sub['style_msm'], STAR_Y_RATIO, gam_ls=sub['ratio_ls'])
         
         ax.axhline(1.0, color='gray', linestyle=':', alpha=0.7)
-        ax.set_title(f'Ratio ({SITE_A} / {SITE_B}) {title_suffix}', fontsize=20)
-        ax.set_ylabel('Ratio', fontsize=17)
+        ax.set_ylabel('Ratio', fontsize=20)  # 17 -> 20
+
+    # Big column titles on top (22 -> 26, not bold)
+    axes[0, 0].set_title(f'{SITE_A} Sites', fontsize=26, pad=12)
+    axes[0, 1].set_title(f'{SITE_B} Sites', fontsize=26, pad=12)
+    axes[0, 2].set_title(f'Ratio {SITE_A}/{SITE_B}', fontsize=26, pad=12)
 
     # ==========================================
     # AESTHETICS & LAYOUT
@@ -379,7 +384,7 @@ def plot_4_6_cmp():
     for i in range(2):
         for j in range(3):
             ax = axes[i, j]
-            ax.tick_params(axis='both', which='major', labelsize=16)
+            ax.tick_params(axis='both', which='major', labelsize=19)  # 16 -> 19
             ax.grid(True, alpha=0.3)
             ax.set_xscale('log')
             
@@ -398,23 +403,22 @@ def plot_4_6_cmp():
             ax.spines["top"].set_visible(False)
             ax.spines["right"].set_visible(False)
 
-    # Common text and Unified Legend
-    fig.text(0.5, 0.02, 'Accumulated Simulation Time (μs)', ha='center', fontsize=20)
-    fig.text(0.02, 0.5, 'Permeability (1/s/µM/NPC) / Ratio', va='center', rotation='vertical', fontsize=20)
+    # Common text and Unified Legend (20 -> 24, 16 -> 19)
+    fig.text(0.5, 0.02, 'Accumulated Simulation Time (μs)', ha='center', fontsize=24)
+    fig.text(0.02, 0.5, 'Permeability (1/s/µM/NPC)', va='center', rotation='vertical', fontsize=24)
     fig.suptitle(f'Convergence & Ratio Analysis for {RADIUS_TARGET}Å Radius (Sites {SITE_A} vs {SITE_B})\n(Red band indicates fitted power law regressor leeway)', 
-                fontsize=16, y=0.98)
+                fontsize=19, y=0.98)
 
+    targ_line.set_label('Fitted')
     custom_lines = [
-        Line2D([0], [0], color=STYLE['msm_time']['color'], marker=STYLE['msm_time']['marker'], linestyle='-', linewidth=2, label='iMSM (time subset)'),
-        Line2D([0], [0], color=STYLE['msm_sim']['color'], marker=STYLE['msm_sim']['marker'], linestyle='-', linewidth=2, label='iMSM (sim subset)'),
-        Line2D([0], [0], color=STYLE['md_time']['color'], marker=STYLE['md_time']['marker'], linestyle='-', linewidth=1.5, alpha=0.8, label='MD (time subset)'),
-        Line2D([0], [0], color=STYLE['md_sim']['color'], marker=STYLE['md_sim']['marker'], linestyle='-', linewidth=1.5, alpha=0.8, label='MD (sim subset)'),
+        Line2D([0], [0], color=STYLE['msm_time']['color'], marker=STYLE['msm_time']['marker'], linestyle='-', linewidth=2, label='iMSM'),
+        Line2D([0], [0], color=STYLE['md_time']['color'], marker=STYLE['md_time']['marker'], linestyle='-', linewidth=1.5, alpha=0.8, label='MD'),
         targ_line
     ]
 
-    fig.legend(handles=custom_lines, loc='upper center', bbox_to_anchor=(0.5, 0.93), ncol=5, frameon=False, fontsize=16)
+    fig.legend(handles=custom_lines, loc='upper center', bbox_to_anchor=(0.5, 0.94), ncol=3, frameon=False, fontsize=22)  # 18 -> 22
 
-    plt.tight_layout(rect=[0.04, 0.04, 1, 0.90])
+    plt.tight_layout(rect=[0.06, 0.04, 1, 0.90])
     plt.show()
     return fig
 

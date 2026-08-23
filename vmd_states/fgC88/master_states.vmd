@@ -1,0 +1,193 @@
+# ==============================================================================
+# VMD Visualization Script for iMSM Markov States
+# Focal Component: fgC88 (SER950)
+# ==============================================================================
+
+proc setup_msm_representations {} {
+    # Remove existing representations
+    set nreps [molinfo top get numreps]
+    for {set i [expr {$nreps - 1}]} {$i >= 0} {incr i -1} {
+        mol delrep $i top
+    }
+
+    # Define color palette matching 2D network plot
+    color change rgb 1 0.545 0.000 0.000   ;# HEAT 5: Dark Red (#8B0000)
+    color change rgb 9 1.000 0.420 0.420   ;# HEAT 6: Light Red (#FF6B6B)
+    color change rgb 6 0.470 0.565 0.612   ;# Kap95 Non-HEAT: Slate Gray (#78909C)
+    color change rgb 3 1.000 0.549 0.000   ;# Focal Bead: Deep Orange (#FF8C00)
+    color change rgb 7 0.078 0.612 0.149   ;# FG Chain 1: Green (#149C26)
+    color change rgb 2 0.750 0.750 0.750   ;# FG Chain 2: Light Gray
+    color change rgb 8 1.000 1.000 1.000   ;# Background: Pure White
+
+    # 1. Kap95 Non-HEAT Backbone - Transparent Silver/Slate
+    mol representation NewCartoon 0.28 10.0 4.1 0
+    mol color ColorID 6
+    mol selection "protein and resid 1 to 861 and not (resid 175 to 195 or resid 218 to 232)"
+    mol material Transparent
+    mol addrep top
+
+    # 2. HEAT Repeat 5 (resid 175 to 195) - Solid Dark Red
+    mol representation NewCartoon 0.45 10.0 4.1 0
+    mol color ColorID 1
+    mol selection "resid 175 to 195"
+    mol material Glossy
+    mol addrep top
+
+    # 3. HEAT Repeat 6 (resid 218 to 232) - Solid Light Red
+    mol representation NewCartoon 0.45 10.0 4.1 0
+    mol color ColorID 9
+    mol selection "resid 218 to 232"
+    mol material Glossy
+    mol addrep top
+
+    # 4. FG Chain 1 Focal Flanking Segment (resid 945 to 955, +/-5 aa) - Solid Smooth Tube
+    mol representation Tube 0.35 16.0
+    mol color ColorID 7
+    mol selection "resid 945 to 955"
+    mol material AOChalky
+    mol addrep top
+
+    # 5. FG Chain 1 Rest of Chain - Transparent Smooth Tube
+    mol representation Tube 0.25 16.0
+    mol color ColorID 7
+    mol selection "resid 862 to 986 and not (resid 945 to 955)"
+    mol material Transparent
+    mol addrep top
+
+    # 6. Focal FG Bead (SER950) - Prominent Solid Orange Sphere
+    mol representation VDW 0.90 24.0
+    mol color ColorID 3
+    mol selection "(resid 950) and name CA"
+    mol material Glossy
+    mol addrep top
+
+    # 7. FG Chain 2 (resid 987 to 1111) - Subtle Transparent Smooth Tube
+    mol representation Tube 0.20 16.0
+    mol color ColorID 2
+    mol selection "resid 987 to 1111"
+    mol material Transparent
+    mol addrep top
+
+    # Display settings matching 2D plot projection
+    display projection Orthographic
+    display depthcue off
+    display backgroundgradient off
+    color Display Background white
+    axes location off
+}
+
+proc align_heat_to_reference {} {
+    set cur_frame [molinfo top get frame]
+    set sel_ref [atomselect top "protein and (resid 175 to 195 or resid 218 to 232) and name CA" frame 0]
+    set sel_cur [atomselect top "protein and (resid 175 to 195 or resid 218 to 232) and name CA" frame $cur_frame]
+    set trans_mat [measure fit $sel_cur $sel_ref]
+    set move_all [atomselect top "all" frame $cur_frame]
+    $move_all move $trans_mat
+    $sel_ref delete
+    $sel_cur delete
+    $move_all delete
+}
+
+proc align_view_to_state {rot_x rot_y rot_z zoom_scale} {
+    align_heat_to_reference
+    set heat_sel [atomselect top "protein and (resid 175 to 195 or resid 218 to 232) and name CA" frame 0]
+    set heat_center [measure center $heat_sel]
+    $heat_sel delete
+    molinfo top set center [list $heat_center]
+    display resetview
+    molinfo top set center [list $heat_center]
+    rotate y by $rot_y
+    rotate x by $rot_x
+    rotate z by $rot_z
+    scale by $zoom_scale
+}
+
+proc view_state {state_id} {
+    setup_msm_representations
+    switch -- $state_id {
+        0 {
+            animate goto 11750
+            align_view_to_state -44.2 -56.1 -25.8 6.00
+            puts ">> Viewing Markov State 0: Frame 11750 (11280.0 ns / 11.28 us)"
+        }
+        1 {
+            animate goto 12750
+            align_view_to_state -44.2 -56.1 -25.8 6.00
+            puts ">> Viewing Markov State 1: Frame 12750 (12240.0 ns / 12.24 us)"
+        }
+        2 {
+            animate goto 7250
+            align_view_to_state -44.2 -56.1 -25.8 6.00
+            puts ">> Viewing Markov State 2: Frame 7250 (6960.0 ns / 6.96 us)"
+        }
+        3 {
+            animate goto 1750
+            align_view_to_state -44.2 -56.1 -25.8 6.00
+            puts ">> Viewing Markov State 3: Frame 1750 (1680.0 ns / 1.68 us)"
+        }
+        4 {
+            animate goto 3750
+            align_view_to_state -44.2 -56.1 -25.8 6.00
+            puts ">> Viewing Markov State 4: Frame 3750 (3600.0 ns / 3.60 us)"
+        }
+        5 {
+            animate goto 2750
+            align_view_to_state -44.2 -56.1 -25.8 6.00
+            puts ">> Viewing Markov State 5: Frame 2750 (2640.0 ns / 2.64 us)"
+        }
+        default {
+            puts "Error: Unknown state_id $state_id. Available states: 0 to 5"
+        }
+    }
+}
+
+proc render_state_png {filename} {
+    set base_no_ext [file rootname $filename]
+    set tmp_tga "${base_no_ext}.tmp.tga"
+    render snapshot $tmp_tga
+    display update
+
+    # Convert raw TGA framebuffer capture to true RFC-standard PNG using Python PIL
+    set py_script "from PIL import Image; im = Image.open(r'$tmp_tga'); im.save(r'$filename', format='PNG')"
+    set converted 0
+    if {[catch {exec conda run -n general python3 -c $py_script} py3_err] == 0} {
+        set converted 1
+    } elseif {[catch {exec python -c $py_script} py_err] == 0} {
+        set converted 1
+    } elseif {[catch {exec convert $tmp_tga $filename} conv_err] == 0} {
+        set converted 1
+    }
+
+    if {$converted} {
+        file delete -force $tmp_tga
+    } else {
+        file rename -force $tmp_tga "${base_no_ext}.tga"
+        puts ">> Notice: Saved raw snapshot as ${base_no_ext}.tga"
+    }
+}
+
+proc render_all_states {out_dir} {
+    file mkdir $out_dir
+    foreach s {0 1 2 3 4 5} {
+        view_state $s
+        display update
+        after 300
+        set filename [format "%s/state_%d.png" $out_dir $s]
+        render_state_png $filename
+        puts ">> Rendered and saved: $filename"
+    }
+    puts ">> Done rendering all states!"
+}
+
+# Apply display and background settings immediately on load
+display projection Orthographic
+display depthcue off
+display backgroundgradient off
+color Display Background white
+axes location off
+
+puts "================================================================="
+puts "iMSM VMD State Visualization Tools Loaded!"
+puts "  - Use: view_state <state_id>   (e.g., view_state 0)"
+puts "  - Use: render_all_states \"/cs/labs/ravehb/roi.eliasian/Master/NPC-markov/vmd_states/fgC88/snapshots\""
+puts "================================================================="

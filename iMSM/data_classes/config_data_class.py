@@ -46,6 +46,7 @@ class iMSMConfig:
     
     # --- Stage 3: Clustering ---
     n_clusters: int = 100
+    merge_cluster_threshold: Optional[float] = None
     custom_clustering: Optional[Callable[[iMSMEmbedding], iMSMClustering]] = None
     
     # --- Stage 4: MSM Construction ---

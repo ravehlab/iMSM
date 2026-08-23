@@ -286,3 +286,100 @@ def plot_committor_vs_z(
     plt.tight_layout()
     plt.show()
     return fig
+
+
+def plot_chapman_kolmogorov_ntr_variants(
+    n_clusters: int = 320,
+    seed: int = 42,
+    top_n_states: int = 25
+) -> plt.Figure:
+    """
+    Performs a Chapman-Kolmogorov test for NTR variants (2, 4, 6 sites, smallest and largest MW: 10Å and 26Å)
+    in the 54nm pore. Displays a 6x5 grid comparing MSM predictions with empirical MD data for 5 randomly chosen states per variant.
+    """
+    sns.set_theme(style="ticks", font_scale=1.2)
+    
+    variants: list[tuple[int, int]] = [
+        (2, 10), (2, 26),
+        (4, 10), (4, 26),
+        (6, 10), (6, 26)
+    ]
+
+    fig, axes = plt.subplots(6, 5, figsize=(18, 14), sharex=True, sharey="row")
+    rng: np.random.Generator = np.random.default_rng(seed)
+
+    for row_idx, (sites, radius) in enumerate(variants):
+        v_dir: str = f"{sites}_{radius}_more"
+        tm_path: str = f"data/ntr_variants/{v_dir}/6_transition_matrices_subsets/1.00fraction_simulations/0index/{n_clusters}clusters.pickle"
+        cl_path: str = f"data/ntr_variants/{v_dir}/5_clustered_subsets/1.00fraction_simulations/0index/{n_clusters}clusters.pickle"
+        clustering_path: str = f"data/ntr_variants/{v_dir}/5_clustering_subsets/1.00fraction_simulations/0index/{n_clusters}clusters.pickle"
+
+        if not os.path.exists(tm_path) or not os.path.exists(cl_path) or not os.path.exists(clustering_path):
+            raise FileNotFoundError(f"Missing required data file for variant {v_dir}")
+
+        with open(tm_path, "rb") as f:
+            tm: np.ndarray = pickle.load(f)
+        with open(cl_path, "rb") as f:
+            cl: np.ndarray = pickle.load(f)
+        with open(clustering_path, "rb") as f:
+            clustering: Any = pickle.load(f)
+
+        z_vals: np.ndarray = clustering.centroids_z_actual.flatten()
+        nuc_st: int = int(np.argmin(z_vals))
+        cyt_st: int = int(np.argmax(z_vals))
+
+        counts: np.ndarray = np.bincount(cl.ravel(), minlength=tm.shape[0])
+        sorted_states: np.ndarray = np.argsort(counts)[::-1]
+        top_pool: list[int] = [s for s in sorted_states[:min(top_n_states, len(sorted_states))] if s not in (nuc_st, cyt_st)]
+        rand_3: np.ndarray = rng.choice(top_pool, size=3, replace=False)
+        chosen_states: list[int] = [nuc_st, cyt_st] + list(rand_3)
+
+        n_frames: int = cl.shape[1]
+        lag_steps: np.ndarray = np.arange(1, n_frames)
+
+        for col_idx, st in enumerate(chosen_states):
+            ax: plt.Axes = axes[row_idx, col_idx]
+
+            tm_k: np.ndarray = np.eye(tm.shape[0])
+            pred: list[float] = []
+            emp: list[float] = []
+            for k in lag_steps:
+                tm_k = tm_k @ tm
+                pred.append(float(tm_k[st, st]))
+
+                starts_mask: np.ndarray = (cl[:, :-k] == st)
+                ends_mask: np.ndarray = (cl[:, k:] == st)
+                total_starts: int = int(np.sum(starts_mask))
+                if total_starts > 0:
+                    emp.append(float(np.sum(starts_mask & ends_mask) / total_starts))
+                else:
+                    emp.append(np.nan)
+
+            ax.plot(lag_steps, pred, label="MSM Model", color="blue", linewidth=2)
+            ax.plot(lag_steps, emp, "o", label="MD Data", color="crimson", markersize=5)
+
+            if col_idx == 0:
+                title = f"n_sites={sites}, r={radius}Å | Nuc (State {st})"
+            elif col_idx == 1:
+                title = f"n_sites={sites}, r={radius}Å | Cyt (State {st})"
+            else:
+                title = f"n_sites={sites}, r={radius}Å | State {st}"
+
+            ax.set_title(title, fontsize=12)
+            ax.set_yscale("log")
+            if sites == 2:
+                ax.set_ylim(0.0001, 2.0)
+            else:
+                ax.set_ylim(0.001, 1.0)
+            ax.set_xticks([2, 4, 6, 8, 10])
+            if row_idx == 5:
+                ax.set_xlabel("Lag time steps", fontsize=11)
+            if col_idx == 0:
+                ax.set_ylabel("P(t)", fontsize=11)
+            ax.grid(True, linestyle="--", alpha=0.5)
+
+    handles, labels = axes[0, 0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="upper center", bbox_to_anchor=(0.5, 1.02), ncol=2, fontsize=14)
+    plt.tight_layout()
+    plt.show()
+    return fig

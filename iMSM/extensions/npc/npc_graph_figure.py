@@ -402,13 +402,13 @@ def visualize_nup_annotations(ax, pie_colors=None, pie_colors_labels=None, add_s
             texts.append(ax.text(x, zs[i], labels[i], fontsize=11, ha=ha, va='center', fontweight='bold'))
         left = not left
     if pie_colors is not None:
-        cyt_text = ax.text(-30, 30, "Cytoplasm", fontsize=11, fontweight='bold', color=pie_colors[pie_colors_labels.index('Cytoplasm')])
-        cyt_channel_text = ax.text(-30, 28, 'Unbound Channel (Cyt)', fontsize=11, fontweight='bold', color=pie_colors[pie_colors_labels.index('Unbound Channel (Cyt)')])
-        nuc_text = ax.text(-30, -30, "Nucleus", fontsize=11, fontweight='bold', color=pie_colors[pie_colors_labels.index('Nucleus')])
-        nuc_channel_text = ax.text(-30, -28, 'Unbound Channel (Nuc)', fontsize=11, fontweight='bold', color=pie_colors[pie_colors_labels.index('Unbound Channel (Nuc)')])
+        cyt_text = ax.text(-30, 30, "Cytoplasm", fontsize=11, fontweight='bold', color=pie_colors[pie_colors_labels.index('Cytoplasm')], fontfamily='Roboto Condensed')
+        cyt_channel_text = ax.text(-30, 28, 'Unbound Channel (Cyt)', fontsize=11, fontweight='bold', color=pie_colors[pie_colors_labels.index('Unbound Channel (Cyt)')], fontfamily='Roboto Condensed')
+        nuc_text = ax.text(-30, -30, "Nucleus", fontsize=11, fontweight='bold', color=pie_colors[pie_colors_labels.index('Nucleus')], fontfamily='Roboto Condensed')
+        nuc_channel_text = ax.text(-30, -28, 'Unbound Channel (Nuc)', fontsize=11, fontweight='bold', color=pie_colors[pie_colors_labels.index('Unbound Channel (Nuc)')], fontfamily='Roboto Condensed')
     else:
-        cyt_text = ax.text(-30, 30, "Cytoplasm", fontsize=11, fontweight='bold')
-        nuc_text = ax.text(-30, -30, "Nucleus", fontsize=11, fontweight='bold')
+        cyt_text = ax.text(-30, 30, "Cytoplasm", fontsize=11, fontweight='bold', fontfamily='Roboto Condensed')
+        nuc_text = ax.text(-30, -30, "Nucleus", fontsize=11, fontweight='bold', fontfamily='Roboto Condensed')
     # texts, _ = adjust_text(texts, ax = ax)
     
     # add outlines
@@ -471,7 +471,10 @@ def visualize_arrows_between_mesostates(P, fig, ax, good_cluster_indices, mus, s
     # min_transition_probability = 0.01
     # max_transition_probability = 0.05
     # transitions_vmin, transitions_vmax = np.min(P), np.max(P)
-    transitions_cmap = plt.cm.Greys 
+    transitions_cmap = LinearSegmentedColormap.from_list(
+        'slight_gray_to_black',
+        [plt.cm.Greys(0.25), plt.cm.Greys(1.0)]
+    )
     transitions_norm = plt.Normalize(vmin=np.log10(min_rate), vmax=np.log10(max_rate))
     
     if in_out_flow not in [None, "in", "out"]:
@@ -516,15 +519,32 @@ def visualize_arrows_between_mesostates(P, fig, ax, good_cluster_indices, mus, s
         sm = plt.cm.ScalarMappable(cmap=transitions_cmap, norm=transitions_norm)
         sm.set_array([]) # Required in some versions of matplotlib to avoid errors
         
-        # Add the colorbar, linking it to the specific 'ax'
-        # 'fraction' and 'pad' help keep it properly scaled next to the plot
-        cbar = fig.colorbar(sm, ax=ax, fraction=0.046, pad=0.04)
+        cax = ax.inset_axes([1.02, 0.0, 0.04, 1.0])
+        cbar = fig.colorbar(sm, cax=cax)
         
         # cbar.ax.set_title(r'$\frac{P[i,j] + P[j,i]}{2}$', fontsize=14)
         if show_colorbar_title:
             cbar.ax.set_title(r'Transition Rate $\log_{10} (\frac{1}{\mu s})$', fontsize=14)
 
-def visualize_pie_mesostates(clusters, P, ax2, good_cluster_indices, mus, pie_colors, alpha = 0.8, add_nucleus_cytoplasm_text=True, pie_scaling = 15, dots_only=False):
+def adjust_nucleus_cytoplasm_mus(clusters, P, good_cluster_indices, mus, pie_scaling=15, z_cyto_center=35.0, z_nuc_center=-35.0):
+    stationary_dist = np.power(stationary_distribution(P), 1/3)
+    radii = stationary_dist[good_cluster_indices] * pie_scaling
+    mus_adjusted = np.copy(mus)
+    for i, cluster_i in enumerate(good_cluster_indices):
+        cluster = clusters[cluster_i]
+        rads = calc_non_spoke_cluster_makeup(cluster)
+        if rads[0] > 0.99 or rads[-1] > 0.99:
+            radius = radii[i]
+            area = np.pi * radius**2
+            rect_width = 45
+            rect_height = area / rect_width
+            if rads[-1] > 0.99:  # Cytoplasm: center at +z_cyto_center, bottom edge at z_cyto_center - rect_height/2
+                mus_adjusted[i][1] = z_cyto_center - rect_height / 2
+            else:  # Nucleus: center at z_nuc_center, top edge at z_nuc_center + rect_height/2
+                mus_adjusted[i][1] = z_nuc_center + rect_height / 2
+    return mus_adjusted
+
+def visualize_pie_mesostates(clusters, P, ax2, good_cluster_indices, mus, pie_colors, alpha = 0.8, add_nucleus_cytoplasm_text=True, pie_scaling = 15, dots_only=False, z_cyto_center=35.0, z_nuc_center=-35.0, nucleus_cytoplasm_fontsize=36):
     # stationary_dist = stationary_distribution(P)
     stationary_dist = np.power(stationary_distribution(P), 1/3)  # Adjusted for better visualization
     radii = stationary_dist[good_cluster_indices] * pie_scaling # scale for visibility
@@ -538,13 +558,18 @@ def visualize_pie_mesostates(clusters, P, ax2, good_cluster_indices, mus, pie_co
             area = np.pi * radius**2
             rect_width = 45
             rect_height = area / rect_width
-            rect_xy = (mus[i][0] - rect_width / 2, mus[i][1] if rads[-1] > 0.99 else mus[i][1] - rect_height)
+            if rads[-1] > 0.99:  # Cytoplasm
+                rect_xy = (mus[i][0] - rect_width / 2, z_cyto_center - rect_height / 2)
+                text_y = z_cyto_center
+            else:  # Nucleus
+                rect_xy = (mus[i][0] - rect_width / 2, z_nuc_center - rect_height / 2)
+                text_y = z_nuc_center
             rectangle = FancyBboxPatch(rect_xy,
                                   rect_width, rect_height, facecolor=pie_colors[0] if rads[0] > 0.99 else pie_colors[-1],
-                                  zorder = -radius, alpha=alpha, edgecolor='white', linewidth=0.6, boxstyle="Round,pad=0.2,rounding_size=3")
+                                  zorder = -radius, alpha=alpha, edgecolor='black', linewidth=1.2, boxstyle="Round,pad=0.2,rounding_size=3")
             ax2.add_patch(rectangle)
             if add_nucleus_cytoplasm_text:
-                ax2.text(mus[i][0], mus[i][1] + rect_height / 2 if rads[-1] > 0.99 else mus[i][1] - rect_height / 2, 'Nucleus' if rads[0] > 0.99 else 'Cytoplasm', fontsize=24, color="#515151", ha='center', va='center', fontweight='bold', zorder = 9999)
+                ax2.text(mus[i][0], text_y, 'Nucleus' if rads[0] > 0.99 else 'Cytoplasm', fontsize=nucleus_cytoplasm_fontsize, color="#515151", ha='center', va='center', fontweight='bold', zorder = 9999, fontfamily='Roboto Condensed')
             continue
         
         if dots_only:
@@ -570,6 +595,9 @@ def visualize_pie_mesostates(clusters, P, ax2, good_cluster_indices, mus, pie_co
                           zorder = -radius)
             ax2.add_patch(wedge)
             theta_start += frac
+        
+        circle_border = plt.Circle((mus[i][0], mus[i][1]), radius=radius, facecolor='none', edgecolor='black', linewidth=1.2, zorder=-radius + 0.1)
+        ax2.add_patch(circle_border)
 
 def vizualize_spoke_boundries(ax):
     ax.axvline(x=0, color='black', linestyle='--', linewidth=2)
@@ -890,7 +918,10 @@ def pick_good_clusters_by_mu_angle(mus, clusters, angle_threshold_degrees=90, an
 def visualize_vector_field_mesostates(P, fig, ax, good_cluster_indices, mus, show_colorbar_title=True, in_out_flow=None, show_colorbar=True, min_rate=0.01, max_rate=0.5, arrow_scale=5):
     Q = infinitesimal_generator(P, dt=1) # rate at 1 / us
     
-    transitions_cmap = plt.cm.Greys 
+    transitions_cmap = LinearSegmentedColormap.from_list(
+        'slight_gray_to_black',
+        [plt.cm.Greys(0.25), plt.cm.Greys(1.0)]
+    )
     transitions_norm = plt.Normalize(vmin=np.log10(min_rate), vmax=np.log10(max_rate))
     
     if in_out_flow not in [None, "in", "out"]:
@@ -988,12 +1019,13 @@ def visualize_vector_field_mesostates(P, fig, ax, good_cluster_indices, mus, sho
         sm = plt.cm.ScalarMappable(cmap=transitions_cmap, norm=transitions_norm)
         sm.set_array([]) 
         
-        cbar = fig.colorbar(sm, ax=ax, fraction=0.046, pad=0.04)
+        cax = ax.inset_axes([1.02, 0.0, 0.04, 1.0])
+        cbar = fig.colorbar(sm, cax=cax)
         
         if show_colorbar_title:
             cbar.ax.set_title(r'Net Rate $\log_{10} (\frac{1}{\mu s})$', fontsize=14)
 
-def comparison_plot(base_tm_path, base_cluster_path, radii, n_sites, title, in_out_flow=None, ignored_nup_types=None, add_mini_titles=False, pie_scaling=15, min_rate=0.01, max_rate=5, time_step_us=5, show_scale_bars=True, swap_axes=False, use_actual_mus_path=None, dots_only=False, add_nucleus_cytoplasm_text=True):
+def comparison_plot(base_tm_path, base_cluster_path, radii, n_sites, title, in_out_flow=None, ignored_nup_types=None, add_mini_titles=False, pie_scaling=15, min_rate=0.01, max_rate=5, time_step_us=5, show_scale_bars=True, swap_axes=False, use_actual_mus_path=None, dots_only=False, add_nucleus_cytoplasm_text=True, nucleus_cytoplasm_fontsize=36):
     n_samples = 2000
     
     # 1. Determine figure grid dimensions based on the swap_axes argument
@@ -1006,12 +1038,12 @@ def comparison_plot(base_tm_path, base_cluster_path, radii, n_sites, title, in_o
     
     # --- FIX 1: Adjust Figure Dimensions to Match Data Aspect Ratio ---
     plot_width = 10
-    plot_height = plot_width * (80 / 60)  # approx 13.33
+    plot_height = plot_width * (92.0 / 60.0)  # 15.333
     
     fig, axes = plt.subplots(fig_y, fig_x, 
                              figsize=(plot_width * fig_x, plot_height * fig_y), 
                              squeeze=False, 
-                             gridspec_kw={'wspace': 0.02, 'hspace': 0.02})
+                             gridspec_kw={'wspace': 0.0, 'hspace': 0.02})
     
     # Adjusted title y-position for the taller figure
     fig.suptitle(title, fontsize=20, y=0.95)
@@ -1043,7 +1075,7 @@ def comparison_plot(base_tm_path, base_cluster_path, radii, n_sites, title, in_o
                 ax.set_title(f'Radius: {r} nm, n_sites: {n}', fontsize=14)
             # set range of axes
             ax.set_xlim(-30, 30)
-            ax.set_ylim(-40, 40)
+            ax.set_ylim(-46, 46)
             
             # This ensures 1 unit on x = 1 unit on y (isometric)
             ax.set_aspect('equal', adjustable='box')
@@ -1070,13 +1102,14 @@ def comparison_plot(base_tm_path, base_cluster_path, radii, n_sites, title, in_o
                 mus = estimate_clusters_mu_2(actual_mus, good_mesostate_indices)
             else:
                 mus, covs = estimate_cluters_mu_cov(n_samples, clusters, coordinate_edges, good_mesostate_indices)
- 
+
+            mus = adjust_nucleus_cytoplasm_mus(clusters, P, good_mesostate_indices, mus, pie_scaling=pie_scaling)
             
             # 3. Update colorbar logic to check the dynamic row/col index (top-right plot)
             show_colorbar = (row_idx == 0 and col_idx == fig_x - 1)  
             
             visualize_arrows_between_mesostates(P, fig, ax, good_mesostate_indices, mus, show_colorbar_title=False, in_out_flow=in_out_flow, show_colorbar=show_colorbar, min_rate=min_rate, max_rate=max_rate, time_step_us=time_step_us)
-            visualize_pie_mesostates(clusters, P, ax, good_mesostate_indices, mus, PIE_COLORS, add_nucleus_cytoplasm_text=add_nucleus_cytoplasm_text, pie_scaling=pie_scaling, dots_only=dots_only)
+            visualize_pie_mesostates(clusters, P, ax, good_mesostate_indices, mus, PIE_COLORS, add_nucleus_cytoplasm_text=add_nucleus_cytoplasm_text, pie_scaling=pie_scaling, dots_only=dots_only, nucleus_cytoplasm_fontsize=nucleus_cytoplasm_fontsize)
             add_npc_scaffold_picture(ax)
             ax.set_aspect('equal', adjustable='box')
     return fig
@@ -1100,18 +1133,19 @@ def comparison_plot_custom(
     use_actual_mus_paths: Optional[List[str]],
     dots_only: bool,
     add_nucleus_cytoplasm_text: bool = True,
+    nucleus_cytoplasm_fontsize: int = 36,
 ) -> plt.Figure:
     n_samples: int = 2000
     
     plot_width: float = 10.0
-    plot_height: float = plot_width * (80.0 / 60.0)
+    plot_height: float = plot_width * (92.0 / 60.0)
     
     fig, axes = plt.subplots(
         n_rows,
         n_cols,
         figsize=(plot_width * n_cols, plot_height * n_rows),
         squeeze=False,
-        gridspec_kw={'wspace': 0.02, 'hspace': 0.02}
+        gridspec_kw={'wspace': 0.0, 'hspace': 0.02}
     )
     
     fig.suptitle(title, fontsize=20, y=0.95)
@@ -1139,7 +1173,7 @@ def comparison_plot_custom(
             ax.set_title(titles[idx], fontsize=14)
             
         ax.set_xlim(-30, 30)
-        ax.set_ylim(-40, 40)
+        ax.set_ylim(-46, 46)
         ax.set_aspect('equal', adjustable='box')
         
         hide_axii_and_show_scale_bar(ax, show_scale_bar=show_scale_bars, show_scale_text=False)
@@ -1168,10 +1202,12 @@ def comparison_plot_custom(
             covs: np.ndarray
             mus, covs = estimate_cluters_mu_cov(n_samples, clusters, coordinate_edges, good_mesostate_indices)
             
+        mus = adjust_nucleus_cytoplasm_mus(clusters, P, good_mesostate_indices, mus, pie_scaling=pie_scaling)
+
         show_colorbar: bool = (row_idx == 0 and col_idx == n_cols - 1)
         
         visualize_arrows_between_mesostates(P, fig, ax, good_mesostate_indices, mus, show_colorbar_title=False, in_out_flow=in_out_flow, show_colorbar=show_colorbar, min_rate=min_rate, max_rate=max_rate, time_step_us=time_step_us)
-        visualize_pie_mesostates(clusters, P, ax, good_mesostate_indices, mus, pie_colors, add_nucleus_cytoplasm_text=add_nucleus_cytoplasm_text, pie_scaling=pie_scaling, dots_only=dots_only)
+        visualize_pie_mesostates(clusters, P, ax, good_mesostate_indices, mus, pie_colors, add_nucleus_cytoplasm_text=add_nucleus_cytoplasm_text, pie_scaling=pie_scaling, dots_only=dots_only, nucleus_cytoplasm_fontsize=nucleus_cytoplasm_fontsize)
         add_npc_scaffold_picture(ax)
         ax.set_aspect('equal', adjustable='box')
         
@@ -1209,7 +1245,9 @@ def comparison_vertical_plot(
     colorbar_pad: Optional[float] = None,
     show_pore_residency: Union[bool, List[bool]] = False,
     show_y_axis: bool = True,
-    legend_ncol: Optional[int] = None
+    legend_ncol: Optional[int] = None,
+    legend_loc: str = "upper center",
+    legend_frameon: bool = False
 ) -> plt.Figure:
     num_plots = len(tm_paths)
     plot_data = []
@@ -1463,7 +1501,7 @@ def comparison_vertical_plot(
 
     custom_gray_cmap = LinearSegmentedColormap.from_list(
         'custom_gray', 
-        [plt.cm.Greys(0.0), plt.cm.Greys(1.0)]
+        [plt.cm.Greys(0.25), plt.cm.Greys(1.0)]
     )
     transitions_norm = Normalize(vmin=np.log10(effective_min_rate), vmax=np.log10(max_rate_all))
     
@@ -1520,11 +1558,13 @@ def comparison_vertical_plot(
             ax.set_ylabel('')
             ax.tick_params(axis='y', which='both', left=False, labelleft=False)
             
-        ax.tick_params(axis='x', which='both', bottom=False, labelbottom=False)
+        ax.tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
         ax.set_xticks([])
+        ax.xaxis.set_visible(False)
         
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
+        ax.spines['bottom'].set_visible(False)
         if col_idx > 0 or not show_y_axis:
             ax.spines['left'].set_visible(False)
         ax.grid(True, linestyle='--', alpha=0.3)
@@ -1564,7 +1604,7 @@ def comparison_vertical_plot(
                 ax.add_patch(circle)
                 circles.append(circle)
                 text_str = 'Nucleus' if rads[0] > 0.75 else 'Cytoplasm'
-                ax.text(center_x, center_y, text_str[0], fontsize=54, color='black', ha='center', va='center', zorder=6)
+                ax.text(center_x, center_y, text_str[0], fontsize=54, color='black', ha='center', va='center', zorder=6, fontfamily='Roboto Condensed')
             else:
                 c_patch = plt.Circle((center_x, center_y), radius=radius, facecolor='none', edgecolor='none', zorder=0)
                 ax.add_patch(c_patch)
@@ -1837,7 +1877,7 @@ def comparison_vertical_plot(
             sm = plt.cm.ScalarMappable(cmap=custom_gray_cmap, norm=transitions_norm)
             sm.set_array([])
             pos = active_axes[-1].get_position()
-            cbar_pad = colorbar_pad if colorbar_pad is not None else (0.02 if n_rows == 1 else 0.01)
+            cbar_pad = colorbar_pad if colorbar_pad is not None else (0.08 if n_rows == 1 else 0.04)
             cbar_width = colorbar_fraction * (pos.x1 - pos.x0)
             cbar_ax = fig.add_axes([pos.x1 + cbar_pad, pos.y0, cbar_width, pos.y1 - pos.y0])
             cbar = fig.colorbar(sm, cax=cbar_ax)
@@ -1864,14 +1904,11 @@ def comparison_vertical_plot(
         cyt_patch = patches.Patch(color='#fc8d62', label='Committor to Cytoplasm')
         nuc_patch = patches.Patch(color='#66c2a5', label='Committor to Nucleus')
         legend_handles.extend([cyt_patch, nuc_patch])
-    if any(show_stationary_dist_list):
-        stat_box = patches.Patch(facecolor='white', edgecolor='#1d4ed8', linewidth=1.5, label='Stationary Probability')
-        legend_handles.append(stat_box)
 
     if legend_handles:
-        bbox = legend_bbox_to_anchor if legend_bbox_to_anchor is not None else ((0.05, 0.96) if n_rows == 1 else (0.05, 0.95))
+        bbox = legend_bbox_to_anchor if legend_bbox_to_anchor is not None else ((0.5, 0.96) if n_rows == 1 else (0.5, 0.95))
         ncol = legend_ncol if legend_ncol is not None else len(legend_handles)
-        fig.legend(handles=legend_handles, loc='upper left', bbox_to_anchor=bbox, fontsize=36, ncol=ncol)
+        fig.legend(handles=legend_handles, loc=legend_loc, bbox_to_anchor=bbox, fontsize=36, ncol=ncol, frameon=legend_frameon)
         
     if any(cb == "nup" for cb in color_by_list):
         fig.subplots_adjust(bottom=0.15)

@@ -147,8 +147,17 @@ def msm_md_wasserstein(tm_path, clustering_path, clustered_path):
 
     return wd
 
+LAYER_BEAD_AMOUNTS = {
+    'nuc': 0, 'nuc_channel': 0, 'Nup2_1': 160, 'Nup60_1': 96, 'Nup2_0': 160, 'Nup60_0': 96,
+    'Nup1_0': 352, 'Nup145_0': 104, 'Nup49_3': 112, 'Nsp1_5': 256, 'Nup49_2': 112, 'Nsp1_4': 256,
+    'Nup57_3': 120, 'Nup145_1': 104, 'Nup57_2': 120, 'mid_channel': 0, 'Nup57_0': 120, 'Nup57_1': 120,
+    'Nsp1_2': 256, 'Nup49_0': 112, 'Nsp1_3': 256, 'Nup49_1': 112, 'Nup100_0': 320, 'Nup159_0': 272,
+    'Nup100_1': 320, 'Nup159_1': 272, 'Nsp1_0': 256, 'Nsp1_1': 256, 'Nup116_0': 384, 'Nup116_1': 384,
+    'cyt_channel': 0, 'cyt': 0
+}
+
 def visualize_stationary_distribution(base_tm_path, base_clustering_path, base_clustered_path,
-                                      r, n, title, x_limits=(0, 0.05), use_energy=False, add_number_labels=True, add_bead_amounts=False, include_unbound_states=True, include_mid_channel=True, right_to_left=False, center_labels=False):
+                                      r, n, title, x_limits=(0, 0.05), use_energy=False, add_number_labels=True, add_bead_amounts=False, include_stationary=True, include_unbound_states=True, include_mid_channel=True, right_to_left=False, center_labels=False):
     tm_path = base_tm_path.replace("#r#", str(r)).replace("#n#", str(n))
     clustering_path = base_clustering_path.replace("#r#", str(r)).replace("#n#", str(n))
     clustered_path = base_clustered_path.replace("#r#", str(r)).replace("#n#", str(n))
@@ -163,26 +172,21 @@ def visualize_stationary_distribution(base_tm_path, base_clustering_path, base_c
     empirical_per_layer = get_empirical_per_layer(clustered, clustering, tm)
     stationary_per_layer = get_stationary_per_layer(tm, clustering)
     if not include_unbound_states:
-        del empirical_per_layer['nuc']
-        del empirical_per_layer['cyt']
-        del empirical_per_layer['nuc_channel']
-        del empirical_per_layer['cyt_channel']
-        del empirical_per_layer['mid_channel']
-        del stationary_per_layer['nuc']
-        del stationary_per_layer['cyt']
-        del stationary_per_layer['nuc_channel']
-        del stationary_per_layer['cyt_channel']
-        del stationary_per_layer['mid_channel']
-        #renormalize
+        for key in ['nuc', 'cyt', 'nuc_channel', 'cyt_channel', 'mid_channel']:
+            if key in empirical_per_layer:
+                del empirical_per_layer[key]
+            if key in stationary_per_layer:
+                del stationary_per_layer[key]
         empirical_total = sum(empirical_per_layer.values())
         stationary_total = sum(stationary_per_layer.values())
         for key in empirical_per_layer.keys():
             empirical_per_layer[key] /= empirical_total
             stationary_per_layer[key] /= stationary_total
     if not include_mid_channel:
-        del empirical_per_layer['mid_channel']
-        del stationary_per_layer['mid_channel']
-        # renormalize
+        if 'mid_channel' in empirical_per_layer:
+            del empirical_per_layer['mid_channel']
+        if 'mid_channel' in stationary_per_layer:
+            del stationary_per_layer['mid_channel']
         empirical_total = sum(empirical_per_layer.values())
         stationary_total = sum(stationary_per_layer.values())
         for key in empirical_per_layer.keys():
@@ -190,7 +194,7 @@ def visualize_stationary_distribution(base_tm_path, base_clustering_path, base_c
             stationary_per_layer[key] /= stationary_total
     
     colors, labels = [], []
-    for key in stationary_per_layer.keys():
+    for key in (stationary_per_layer.keys() if include_stationary else empirical_per_layer.keys()):
         split = key.split("_")
         nup = split[0] if split[0] not in ["nuc", "cyt", "mid"] else key
         color_key = key
@@ -204,17 +208,12 @@ def visualize_stationary_distribution(base_tm_path, base_clustering_path, base_c
             colors.append(PIE_COLORS_DICT[nup])
         labels.append(nup)
 
-    jsd = jensenshannon(
-        np.array(list(empirical_per_layer.values())),
-        np.array(list(stationary_per_layer.values()))
-    ) ** 2
-
     stationary_values = list(stationary_per_layer.values())
     empirical_values = list(empirical_per_layer.values())
     y_positions = np.arange(len(labels))
-    bar_thickness = 0.35 if not add_bead_amounts else 0.25
+    bar_thickness = 0.25 if (add_bead_amounts and include_stationary) else 0.35
     
-    # # reverse everything
+    # reverse everything
     stationary_values = stationary_values[::-1]
     empirical_values = empirical_values[::-1]
     colors = colors[::-1]
@@ -228,13 +227,11 @@ def visualize_stationary_distribution(base_tm_path, base_clustering_path, base_c
         "cyt": "Cytoplasm",
         "cyt channel": "Cyt (partial)",
         "mid channel": "Mid (partial)"
-        # Add any other specific replacements here!
     }
 
     # 2. Apply the custom map, falling back to default formatting if no match is found
     labels = [label_map.get(label, label.replace("_", " ")) for label in labels]
     
-
     fig, ax = plt.subplots(1, 1, figsize=(10, 18))
     ax.set_xlim(*x_limits)
     
@@ -250,20 +247,14 @@ def visualize_stationary_distribution(base_tm_path, base_clustering_path, base_c
     # Logic for centrally aligning labels and preventing axis overlap
     if center_labels:
         h_align = 'center'
-        # Centering places the middle of the text on the axis. 
-        # Pad pushes it outward so it doesn't overlap your bars.
-        # You may need to tweak this number (e.g., 40-60) based on your longest label.
         y_pad = 75
     else:
-        # Revert to standard Matplotlib alignments
         h_align = 'left' if right_to_left else 'right'
-        y_pad = 4 # Matplotlib's default padding
+        y_pad = 4
         
     ax.set_yticklabels(labels, fontsize=23, ha=h_align)
-    ax.tick_params(axis='y', pad=y_pad) # Apply the padding to the y-axis
+    ax.tick_params(axis='y', pad=y_pad)
     ax.tick_params(axis='x', labelsize=24)
-    
-    
     
     ax.grid(axis='x', alpha=0.3, linestyle='--', linewidth=0.7)
     ax.set_axisbelow(True)
@@ -272,43 +263,57 @@ def visualize_stationary_distribution(base_tm_path, base_clustering_path, base_c
     ax.spines['left'].set_visible(False)
     
     if use_energy:
-        stationary_values = -np.log(stationary_values)
-        empirical_values = -np.log(empirical_values)
+        stationary_values = -np.log(np.clip(stationary_values, 1e-10, 1.0))
+        empirical_values = -np.log(np.clip(empirical_values, 1e-10, 1.0))
         
     if add_bead_amounts:
-        if include_unbound_states:
-            n_beads_per_layer = [0, 0, 160, 96, 160, 96, 352, 104, 112, 256, 112, 256, 120, 104, 120, 120, 120, 0, 256, 112, 256, 112, 320, 272, 320, 272, 256, 256, 384, 384, 0, 0]
+        beads_raw = np.array([LAYER_BEAD_AMOUNTS.get(k, 0) for k in empirical_per_layer.keys()], dtype=float)
+        bead_sum = np.sum(beads_raw)
+        n_beads_norm = beads_raw / bead_sum if bead_sum > 0 else beads_raw
+        if not include_stationary:
+            jsd = jensenshannon(
+                np.array(list(empirical_per_layer.values())),
+                n_beads_norm
+            ) ** 2
         else:
-            n_beads_per_layer = [160, 96, 160, 96, 352, 104, 112, 256, 112, 256, 120, 104, 120, 120, 120, 256, 112, 256, 112, 320, 272, 320, 272, 256, 256, 384, 384]
-        n_beads_per_layer = n_beads_per_layer[::-1]
-        n_beads_per_layer = np.array(n_beads_per_layer) / np.sum(n_beads_per_layer)
+            jsd = jensenshannon(
+                np.array(list(empirical_per_layer.values())),
+                np.array(list(stationary_per_layer.values()))
+            ) ** 2
+        n_beads_per_layer = n_beads_norm[::-1]
         if use_energy:
-            n_beads_per_layer = -np.log(n_beads_per_layer)
-            
-        bead_bars = ax.barh(
-            y_positions + bar_thickness,
-            n_beads_per_layer,
-            bar_thickness,
-            label='Bead Amounts',
-            color=colors,
-            alpha=0.5,
-            edgecolor='black',
-            linewidth=1.5,
-            hatch = '|'
-        )
+            n_beads_per_layer = -np.log(np.clip(n_beads_per_layer, 1e-10, 1.0))
+    else:
+        jsd = jensenshannon(
+            np.array(list(empirical_per_layer.values())),
+            np.array(list(stationary_per_layer.values()))
+        ) ** 2
 
-    stationary_bars = ax.barh(
-        y_positions - bar_thickness / 2 if not add_bead_amounts else y_positions,
-        np.minimum(stationary_values, x_limits[1]),
-        bar_thickness,
-        label='Stationary',
-        color=colors,
-        alpha=0.8,
-        edgecolor='black',
-        linewidth=1.5
+    legend_handles = []
+    legend_titles = []
+
+    if include_stationary:
+        stat_y = y_positions - bar_thickness / 2 if not add_bead_amounts else y_positions
+        stationary_bars = ax.barh(
+            stat_y,
+            np.minimum(stationary_values, x_limits[1]),
+            bar_thickness,
+            label='Stationary',
+            color=colors,
+            alpha=0.8,
+            edgecolor='black',
+            linewidth=1.5
+        )
+        legend_handles.append(stationary_bars[0])
+        legend_titles.append('Stationary')
+
+    emp_y = (
+        y_positions + bar_thickness / 2
+        if not add_bead_amounts
+        else (y_positions - bar_thickness if include_stationary else y_positions + bar_thickness / 2)
     )
     empirical_bars = ax.barh(
-        y_positions + bar_thickness / 2 if not add_bead_amounts else y_positions - bar_thickness,
+        emp_y,
         np.minimum(empirical_values, x_limits[1]),
         bar_thickness,
         label='Empirical',
@@ -318,7 +323,24 @@ def visualize_stationary_distribution(base_tm_path, base_clustering_path, base_c
         linewidth=1.5,
         hatch='///'
     )
-    
+    legend_handles.append(empirical_bars[0])
+    legend_titles.append('Empirical')
+
+    if add_bead_amounts:
+        bead_y = y_positions + bar_thickness if include_stationary else y_positions - bar_thickness / 2
+        bead_bars = ax.barh(
+            bead_y,
+            np.minimum(n_beads_per_layer, x_limits[1]),
+            bar_thickness,
+            label='Bead Proportion',
+            color=colors,
+            alpha=0.5,
+            edgecolor='black',
+            linewidth=1.5,
+            hatch='|'
+        )
+        legend_handles.append(bead_bars[0])
+        legend_titles.append('Bead Proportion')
 
     ax.invert_yaxis()
     ax.set_ylabel('Nucleoporin layer by Z of anchor', fontsize=20)
@@ -334,17 +356,11 @@ def visualize_stationary_distribution(base_tm_path, base_clustering_path, base_c
     )
     fig.tight_layout(rect=[0, 0, 1, 0.95])
 
-    legend_handles = [stationary_bars[0], empirical_bars[0]]
-    legend_titles = ['Stationary', 'Empirical']
-    if add_bead_amounts:
-        legend_handles.append(bead_bars[0])
-        legend_titles.append('Bead Amounts')
-        
     ax.legend(
         legend_handles,
         legend_titles,
         loc='upper right',
-        bbox_to_anchor=(1.0, 1.04),  # x=right edge, y>1 moves it higher
+        bbox_to_anchor=(1.0, 1.04),
         fontsize=22,
         framealpha=0.95,
         edgecolor='black',
@@ -353,9 +369,9 @@ def visualize_stationary_distribution(base_tm_path, base_clustering_path, base_c
     )
 
     def add_labels(axis, bars, values):
-            x_max = x_limits[1]  # Use your explicit limit
+            x_max = x_limits[1]
             x_offset = (x_max - x_limits[0]) * 0.01
-            ha_align = 'right' if right_to_left else 'left' # Flip alignment based on direction
+            ha_align = 'right' if right_to_left else 'left'
             
             for bar, val in zip(bars, values):
                 if val > x_max:
@@ -369,7 +385,7 @@ def visualize_stationary_distribution(base_tm_path, base_clustering_path, base_c
             span = x_limits[1] - x_limits[0]
             text_dx = span * 0.04
             cap_dx = span * 0.005
-            ha_align = 'right' if right_to_left else 'left' # Flip alignment
+            ha_align = 'right' if right_to_left else 'left'
 
             for bar, val in zip(bars, values):
                 if val <= limit:
@@ -396,14 +412,16 @@ def visualize_stationary_distribution(base_tm_path, base_clustering_path, base_c
                 axis.plot([limit + 0.0003, limit + 0.0003], [y_pos - 0.5, y_pos + 0.5], linestyle='--', color='gray', clip_on=False)
 
     if add_number_labels:
-        add_labels(ax, stationary_bars, stationary_values)
+        if include_stationary:
+            add_labels(ax, stationary_bars, stationary_values)
         add_labels(ax, empirical_bars, empirical_values)
         if add_bead_amounts:
             add_labels(ax, bead_bars, n_beads_per_layer)
-    annotate_overflows(ax, stationary_bars, stationary_values)
+    if include_stationary:
+        annotate_overflows(ax, stationary_bars, stationary_values)
     annotate_overflows(ax, empirical_bars, empirical_values)
-    # if add_bead_amounts:
-    #         # annotate_overflows(ax, bead_bars, n_beads_per_layer)
+    if add_bead_amounts:
+        annotate_overflows(ax, bead_bars, n_beads_per_layer)
 
     plt.show()
     return fig
@@ -629,7 +647,7 @@ def plot_js_wd():
     wd_fig = plot_wd(wassersteins, kdas_list, n_sites_list)
     return js_fig, wd_fig
 
-def plot_initiator_nups(base_tm_path, base_clustering_path):
+def plot_initiator_nups(base_tm_path: str, base_clustering_path: str, normalize_by_mass: bool = False):
     import numpy as np
     import matplotlib.pyplot as plt
     import pickle
@@ -641,7 +659,22 @@ def plot_initiator_nups(base_tm_path, base_clustering_path):
 
     fig, axes = plt.subplots(2, 2, figsize=(14, 12), sharey=True)
 
-    nup_names = ['Nup2', 'Nup60', 'Nup1', 'Nup145', 'Nup49', 'Nsp1', 'Nup57', 'Nup100', 'Nup159', 'Nup116']
+    nup_keys = ['Nup2', 'Nup60', 'Nup1', 'Nup145', 'Nup49', 'Nsp1_inner', 'Nup57', 'Nup100', 'Nup159', 'Nsp1_cyt', 'Nup116']
+    display_labels = ['Nsp1 (cyt)' if k == 'Nsp1_cyt' else ('Nsp1 (inner)' if k == 'Nsp1_inner' else k) for k in nup_keys]
+
+    nup_masses = {
+        'Nup2': LAYER_BEAD_AMOUNTS['Nup2_0'] + LAYER_BEAD_AMOUNTS['Nup2_1'],
+        'Nup60': LAYER_BEAD_AMOUNTS['Nup60_0'] + LAYER_BEAD_AMOUNTS['Nup60_1'],
+        'Nup1': LAYER_BEAD_AMOUNTS['Nup1_0'],
+        'Nup145': LAYER_BEAD_AMOUNTS['Nup145_0'] + LAYER_BEAD_AMOUNTS['Nup145_1'],
+        'Nup49': sum(LAYER_BEAD_AMOUNTS[f'Nup49_{i}'] for i in range(4)),
+        'Nsp1_inner': sum(LAYER_BEAD_AMOUNTS[f'Nsp1_{i}'] for i in range(2, 6)),
+        'Nup57': sum(LAYER_BEAD_AMOUNTS[f'Nup57_{i}'] for i in range(4)),
+        'Nup100': LAYER_BEAD_AMOUNTS['Nup100_0'] + LAYER_BEAD_AMOUNTS['Nup100_1'],
+        'Nup159': LAYER_BEAD_AMOUNTS['Nup159_0'] + LAYER_BEAD_AMOUNTS['Nup159_1'],
+        'Nsp1_cyt': LAYER_BEAD_AMOUNTS['Nsp1_0'] + LAYER_BEAD_AMOUNTS['Nsp1_1'],
+        'Nup116': LAYER_BEAD_AMOUNTS['Nup116_0'] + LAYER_BEAD_AMOUNTS['Nup116_1'],
+    }
 
     for col_idx, n_sites in enumerate(n_sites_list):
         tm_path = base_tm_path.replace("#r#", str(r)).replace("#n#", str(n_sites))
@@ -667,10 +700,10 @@ def plot_initiator_nups(base_tm_path, base_clustering_path):
         cyt_res = np.argmax(cyt_comps)
 
         # We also define the FG compositions of all clusters
-        # Mapping 32 layered states to the 10 FG Nups
+        # Mapping layered states to FG Nups with separated Nsp1 cyt/inner
         fg_compositions = []
         for makeup in cluster_makeups:
-            fg_comp = {nup: 0.0 for nup in nup_names}
+            fg_comp = {nup: 0.0 for nup in nup_keys}
             # Sum layers for each Nup type
             fg_comp['Nup2'] = makeup.get('Nup2_0', 0.0) + makeup.get('Nup2_1', 0.0)
             fg_comp['Nup60'] = makeup.get('Nup60_0', 0.0) + makeup.get('Nup60_1', 0.0)
@@ -678,9 +711,9 @@ def plot_initiator_nups(base_tm_path, base_clustering_path):
             fg_comp['Nup145'] = makeup.get('Nup145_0', 0.0) + makeup.get('Nup145_1', 0.0)
             fg_comp['Nup49'] = (makeup.get('Nup49_0', 0.0) + makeup.get('Nup49_1', 0.0) +
                                 makeup.get('Nup49_2', 0.0) + makeup.get('Nup49_3', 0.0))
-            fg_comp['Nsp1'] = (makeup.get('Nsp1_0', 0.0) + makeup.get('Nsp1_1', 0.0) +
-                               makeup.get('Nsp1_2', 0.0) + makeup.get('Nsp1_3', 0.0) +
-                               makeup.get('Nsp1_4', 0.0) + makeup.get('Nsp1_5', 0.0))
+            fg_comp['Nsp1_cyt'] = makeup.get('Nsp1_0', 0.0) + makeup.get('Nsp1_1', 0.0)
+            fg_comp['Nsp1_inner'] = (makeup.get('Nsp1_2', 0.0) + makeup.get('Nsp1_3', 0.0) +
+                                     makeup.get('Nsp1_4', 0.0) + makeup.get('Nsp1_5', 0.0))
             fg_comp['Nup57'] = (makeup.get('Nup57_0', 0.0) + makeup.get('Nup57_1', 0.0) +
                                 makeup.get('Nup57_2', 0.0) + makeup.get('Nup57_3', 0.0))
             fg_comp['Nup100'] = makeup.get('Nup100_0', 0.0) + makeup.get('Nup100_1', 0.0)
@@ -721,12 +754,19 @@ def plot_initiator_nups(base_tm_path, base_clustering_path):
                             if fg_sum > 0.1:
                                 path_first_interacting = curr
             # Average the profiles
-            avg_profile = {nup: 0.0 for nup in nup_names}
+            avg_profile = {nup: 0.0 for nup in nup_keys}
             for profile in initiator_profiles:
-                for nup in nup_names:
+                for nup in nup_keys:
                     avg_profile[nup] += profile[nup]
-            for nup in nup_names:
+            for nup in nup_keys:
                 avg_profile[nup] /= len(initiator_profiles)
+
+            if normalize_by_mass:
+                norm_profile = {nup: avg_profile[nup] / nup_masses[nup] for nup in nup_keys}
+                total_norm = sum(norm_profile.values())
+                if total_norm > 0.0:
+                    avg_profile = {nup: norm_profile[nup] / total_norm for nup in nup_keys}
+
             return avg_profile
 
         # Nuclear Entry (Nuc -> Cyt transport)
@@ -736,27 +776,33 @@ def plot_initiator_nups(base_tm_path, base_clustering_path):
 
         # Plot Nuc -> Cyt in row 0 (Nuclear Entry)
         ax_n2c = axes[0, col_idx]
-        vals_n2c = [nuc_to_cyt_profile[nup] for nup in nup_names]
-        colors_n2c = [PIE_COLORS_DICT.get(nup, '#7f7f7f') for nup in nup_names]
-        ax_n2c.bar(nup_names, vals_n2c, color=colors_n2c, edgecolor='black', linewidth=0.5)
+        vals_n2c = [nuc_to_cyt_profile[nup] for nup in nup_keys]
+        colors_n2c = [PIE_COLORS_DICT.get(nup, '#7f7f7f') for nup in nup_keys]
+        ax_n2c.bar(display_labels, vals_n2c, color=colors_n2c, edgecolor='black', linewidth=0.5)
         ax_n2c.set_title(f"{n_sites} Sites - Nuclear Entry", fontsize=25)
-        ax_n2c.set_xticklabels(nup_names, rotation=45, ha='right', fontsize=22.5)
+        ax_n2c.set_xticklabels(display_labels, rotation=45, ha='right', fontsize=22.5)
         ax_n2c.tick_params(axis='y', labelsize=22.5)
         ax_n2c.grid(axis='y', linestyle='--', alpha=0.7)
 
         # Plot Cyt -> Nuc in row 1 (Cytoplasmic Entry)
         ax_c2n = axes[1, col_idx]
-        vals_c2n = [cyt_to_nuc_profile[nup] for nup in nup_names]
-        colors_c2n = [PIE_COLORS_DICT.get(nup, '#7f7f7f') for nup in nup_names]
-        ax_c2n.bar(nup_names, vals_c2n, color=colors_c2n, edgecolor='black', linewidth=0.5)
+        vals_c2n = [cyt_to_nuc_profile[nup] for nup in nup_keys]
+        colors_c2n = [PIE_COLORS_DICT.get(nup, '#7f7f7f') for nup in nup_keys]
+        ax_c2n.bar(display_labels, vals_c2n, color=colors_c2n, edgecolor='black', linewidth=0.5)
         ax_c2n.set_title(f"{n_sites} Sites - Cytoplasmic Entry", fontsize=25)
-        ax_c2n.set_xticklabels(nup_names, rotation=45, ha='right', fontsize=22.5)
+        ax_c2n.set_xticklabels(display_labels, rotation=45, ha='right', fontsize=22.5)
         ax_c2n.tick_params(axis='y', labelsize=22.5)
         ax_c2n.grid(axis='y', linestyle='--', alpha=0.7)
 
-    axes[0, 0].set_ylabel("Initiator Nup Fraction", fontsize=26.25)
-    axes[1, 0].set_ylabel("Initiator Nup Fraction", fontsize=26.25)
+    y_label = "Fraction (Mass normalized)" if normalize_by_mass else "Initiator Nup Fraction"
+    axes[0, 0].set_ylabel(y_label, fontsize=26.25)
+    axes[1, 0].set_ylabel(y_label, fontsize=26.25)
 
-    plt.suptitle("Comparison of Initiator Nup Composition (r = 26 Å)", fontsize=32, y=1.02)
+    suptitle_text = (
+        "Comparison of Initiator Nup Composition Normalized by Mass (r = 26 Å)"
+        if normalize_by_mass
+        else "Comparison of Initiator Nup Composition (r = 26 Å)"
+    )
+    plt.suptitle(suptitle_text, fontsize=32, y=1.02)
     plt.tight_layout()
     return fig

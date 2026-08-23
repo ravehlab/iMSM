@@ -4,7 +4,7 @@ import importlib
 
 import figure_supp_helpers
 importlib.reload(figure_supp_helpers)
-from figure_supp_helpers import plot_states_found_over_subset, plot_implied_timescales, plot_committor_vs_z
+from figure_supp_helpers import plot_states_found_over_subset, plot_implied_timescales, plot_committor_vs_z, plot_chapman_kolmogorov_ntr_variants
 
 import iMSM.extensions.npc.npc_graph_figure
 importlib.reload(iMSM.extensions.npc.npc_graph_figure)
@@ -17,6 +17,10 @@ from figure_permeability_helpers import plot_speedup_factor_heatmap, plot_all_co
 import figure_free_energy_helpers
 importlib.reload(figure_free_energy_helpers)
 from figure_free_energy_helpers import plot_all_1d_landscapes
+
+import figure_stationary_helpers
+importlib.reload(figure_stationary_helpers)
+from figure_stationary_helpers import visualize_stationary_distribution, plot_initiator_nups
 
 # %% states_over_subset
 fig = plot_states_found_over_subset()
@@ -118,5 +122,50 @@ fig_b = comparison_vertical_plot(
 save_path_b = "/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/plots/figure_supp/single_spoke_diameter_nup_color"
 os.makedirs(os.path.dirname(save_path_b), exist_ok=True)
 fig_b.savefig(save_path_b + ".png", bbox_inches='tight', dpi=300)
+
+# %% md empirical vs bead proportion (r=10, n=4)
+n_clusters = 320
+r = 10
+n_sites = 4
+fig_eb = visualize_stationary_distribution(
+    base_tm_path=f"data/ntr_variants/#n#_#r#_more/6_transition_matrices_subsets/1.00fraction_simulations/0index/{n_clusters}clusters.pickle",
+    base_clustering_path=f"data/ntr_variants/#n#_#r#_more/5_clustering_subsets/1.00fraction_simulations/0index/{n_clusters}clusters.pickle",
+    base_clustered_path=f"data/ntr_variants/#n#_#r#_more/5_clustered_subsets/1.00fraction_simulations/0index/{n_clusters}clusters.pickle",
+    r=r,
+    n=n_sites,
+    title=f"MD empirical distribution vs bead proportion for r={r}Å, n={n_sites} sites",
+    x_limits=(0, 0.1),
+    use_energy=False,
+    add_number_labels=True,
+    add_bead_amounts=True,
+    include_stationary=False,
+    include_unbound_states=False,
+    include_mid_channel=True,
+    right_to_left=False,
+    center_labels=False
+)
+save_path_eb = "/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/plots/figure_supp/bead_proportion"
+os.makedirs(os.path.dirname(save_path_eb), exist_ok=True)
+fig_eb.savefig(save_path_eb + ".png", bbox_inches='tight', dpi=300)
+
+# %% initiator nups normalized by mass
+n_clusters = 320
+fig_in_mass = plot_initiator_nups(
+    base_tm_path=f"data/ntr_variants/#n#_#r#_more/6_transition_matrices_subsets/1.00fraction_simulations/0index/{n_clusters}clusters.pickle",
+    base_clustering_path=f"data/ntr_variants/#n#_#r#_more/5_clustering_subsets/1.00fraction_simulations/0index/{n_clusters}clusters.pickle",
+    normalize_by_mass=True
+)
+save_path_in_mass = "/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/plots/figure_supp/initiator_nups_mass_normalized"
+os.makedirs(os.path.dirname(save_path_in_mass), exist_ok=True)
+fig_in_mass.savefig(save_path_in_mass + ".png", bbox_inches='tight', dpi=300)
+
+# %% chapman kolmogorov test for ntr variants
+fig_ck = plot_chapman_kolmogorov_ntr_variants()
+save_path_ck = "/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/plots/figure_supp/chapman_kolmogorov_ntr_variants"
+os.makedirs(os.path.dirname(save_path_ck), exist_ok=True)
+fig_ck.savefig(save_path_ck + ".png", bbox_inches='tight', dpi=300)
+
+
+
 
 
