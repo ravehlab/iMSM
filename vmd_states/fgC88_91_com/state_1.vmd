@@ -1,5 +1,5 @@
 # Standalone VMD script for Markov State 1
-# Simulation Frame: 13750 (13200.0 ns / 13.20 us)
+# Simulation Frame: 12250 (11760.0 ns / 11.76 us)
 
 source /cs/labs/ravehb/roi.eliasian/Master/NPC-markov/vmd_states/fgC88_91_com/master_states.vmd
 view_state 1

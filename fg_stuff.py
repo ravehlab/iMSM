@@ -4,7 +4,7 @@
 
 import mdtraj as md
 import numpy as np
-import pickle
+import pickle   
 import re
 import matplotlib.pyplot as plt
 import importlib   
@@ -189,7 +189,7 @@ imsm_runs: list[dict[str, object]] = [
 WINDOW_SIZE: int = 500  # number of frames to consider when generating interaction histograms.
 K_CLOSEST: int = 5  # number of closest neighbors to consider when generating interaction histograms.
 MAX_SURFACE_DIST: float = 1 # 10 angstrom # maximum distance between two components for them to be considered interacting.
-N_CLUSTERS: int = 6  # number of clusters to use for the clustering step
+N_CLUSTERS: int = 5  # number of clusters to use for the clustering step
 MERGE_CLUSTER_THRESHOLD: float = 0.1  # merge clusters closer than threshold
 TM_PRIOR: float = 0.01  # added to all entries counts matrix
 START_STAGE: int = 1
@@ -265,7 +265,7 @@ for item in imsm_runs:
 
 
 # %% static spatial network visualization
-for item in imsm_runs:
+for item in [imsm_runs[-1]]:
     run_name: str = str(item["name"])
     run_chk_path: str = str(item["checkpoint_path"])
     focal_ca: int | tuple[int, int] | list[int] | str = item["focal_fg_alphacarbon"]  # type: ignore[assignment]
@@ -278,17 +278,22 @@ for item in imsm_runs:
     #     kap_n_ca=861,
     #     repeat_colors=("#78909C", "#CFD8DC"),
     #     zoom=False,
+    #     state_size_factor=1.0,
     #     free_threshold=0.90,
     #     dt_ns=1000.0,
     #     auto_align_plane=True,
     #     rotation_x_deg=0.0,
     #     rotation_y_deg=0.0,
+    #     rotation_z_deg=0.0,
+    #     heat5_range=(175, 195),
+    #     heat6_range=(218, 232),
     #     focal_fg_alphacarbon=focal_ca,
     #     native_pdb_path=TOP_PATH,
     #     k_closest=K_CLOSEST,
     #     max_surface_dist=MAX_SURFACE_DIST,
     #     native_similarity_threshold=0.40,
     #     top_n_print=10,
+    #     title=None,
     # )
 
     visualize_kap_states_and_rates(
@@ -299,6 +304,7 @@ for item in imsm_runs:
         kap_n_ca=861,
         repeat_colors=("#78909C", "#CFD8DC"),
         zoom=True,
+        state_size_factor=2.0,
         free_threshold=0.9,
         dt_ns=1000.0,
         auto_align_plane=True,
@@ -313,6 +319,7 @@ for item in imsm_runs:
         max_surface_dist=MAX_SURFACE_DIST,
         native_similarity_threshold=0.75,
         top_n_print=10,
+        title="",
     )
 
 
@@ -341,4 +348,5 @@ for item in imsm_runs:
         heat5_range=(175, 195),
         heat6_range=(218, 232),
         vmd_zoom_scale=8.0,
+        all_states_translate=(-0.3, 0.3, 0.0),
     )

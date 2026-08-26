@@ -16,6 +16,7 @@ class iMSMConfig:
     start_stage: int = 1
     end_stage: int = 5
     n_cpus: int = 1
+    seed: Optional[int] = None
     
     
     # normal: normal run

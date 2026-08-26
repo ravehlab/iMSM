@@ -1,5 +1,5 @@
 # Standalone VMD script for Markov State 4
-# Simulation Frame: 250 (240.0 ns / 0.24 us)
+# Simulation Frame: 1250 (1200.0 ns / 1.20 us)
 
 source /cs/labs/ravehb/roi.eliasian/Master/NPC-markov/vmd_states/fgC90/master_states.vmd
 view_state 4

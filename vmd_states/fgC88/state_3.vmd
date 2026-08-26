@@ -1,5 +1,5 @@
 # Standalone VMD script for Markov State 3
-# Simulation Frame: 1750 (1680.0 ns / 1.68 us)
+# Simulation Frame: 3750 (3600.0 ns / 3.60 us)
 
 source /cs/labs/ravehb/roi.eliasian/Master/NPC-markov/vmd_states/fgC88/master_states.vmd
 view_state 3

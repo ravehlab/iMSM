@@ -61,7 +61,7 @@ def default_cluster(embedding: iMSMEmbedding, iMSMConfig: iMSMConfig) -> iMSMClu
             reshaped_embedded_trajectories[i * embedded_trajectories.shape[2] + j] = embedded_trajectories[i, :, j]
     
     # use k-means
-    kmeans = KMeans(n_clusters=n_clusters)
+    kmeans = KMeans(n_clusters=n_clusters, random_state=iMSMConfig.seed)
     clustered = kmeans.fit_predict(reshaped_embedded_trajectories)
     
     if iMSMConfig.merge_cluster_threshold is not None:

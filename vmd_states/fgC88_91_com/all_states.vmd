@@ -1,0 +1,5 @@
+# Standalone VMD script for All Markov States Overlay on Native Kap95
+
+source /cs/labs/ravehb/roi.eliasian/Master/NPC-markov/vmd_states/fgC88_91_com/master_states.vmd
+view_all_states
+render_state_png "/cs/labs/ravehb/roi.eliasian/Master/NPC-markov/vmd_states/fgC88_91_com/snapshots/all_states.png"

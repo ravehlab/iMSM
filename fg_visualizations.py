@@ -4,7 +4,7 @@ import re
 import matplotlib.patheffects as pe
 import matplotlib.path as mpath
 import matplotlib.pyplot as plt
-from matplotlib.colors import LinearSegmentedColormap
+from matplotlib.colors import LinearSegmentedColormap, LogNorm
 from matplotlib.lines import Line2D
 from matplotlib.patches import FancyArrowPatch
 import mdtraj as md
@@ -346,6 +346,7 @@ def visualize_kap_states_and_rates(
     kap_n_ca: int,
     repeat_colors: tuple[str, str],
     zoom: bool,
+    state_size_factor: float,
     free_threshold: float,
     dt_ns: float,
     auto_align_plane: bool,
@@ -360,6 +361,7 @@ def visualize_kap_states_and_rates(
     max_surface_dist: float,
     native_similarity_threshold: float,
     top_n_print: int,
+    title: str | None,
 ) -> None:
     """Visualize Markov state spatial centroids and transition rates projected onto the 2D plane of Kap95."""
     _, focal_label = extract_focal_info(focal_fg_alphacarbon=focal_fg_alphacarbon)
@@ -416,8 +418,15 @@ def visualize_kap_states_and_rates(
 
     print("\n=======================================================")
     print(
-        f"Native State Analysis (Focal Bead {focal_label}, Similarity Thresh: {native_similarity_threshold:.2f}):"
+        f"Markov State Analysis (Focal Bead {focal_label}, Native Similarity Thresh: {native_similarity_threshold:.2f}):"
     )
+    interact_strs: list[str] = []
+    for i in range(n_clusters):
+        unbound_val: float = float(unbound_weights[i]) if (unbound_col_idx >= 0 and len(unbound_weights) > i) else 0.0
+        inter_pct: float = max(0.0, min(1.0, 1.0 - unbound_val)) * 100.0
+        free_str: str = " (Free)" if (free_state_idx is not None and i == free_state_idx) else ""
+        interact_strs.append(f"State {i}: {inter_pct:.1f}%{free_str}")
+    print(f"Total Interacting %: {', '.join(interact_strs)}")
     sim_strs: list[str] = [f"State {i}: {similarities[i]:.3f}" for i in range(n_clusters)]
     print(f"Cluster Cosine Similarities: {', '.join(sim_strs)}")
     print(f"Matched native-like states: {list(native_state_indices)}")
@@ -533,10 +542,10 @@ def visualize_kap_states_and_rates(
         center_x: float = float((x_min_bound + x_max_bound) / 2.0)
         center_y: float = float((y_min_bound + y_max_bound) / 2.0)
 
-        # Show a 4.0 x 4.0 nm area (or larger if bound states span more than 4 nm) centered on bound states
-        target_span: float = 4.0
-        span_x: float = max(x_max_bound - x_min_bound + 1.0, target_span)
-        span_y: float = max(y_max_bound - y_min_bound + 1.0, target_span)
+        # Show a tightly zoomed area centered on bound states
+        target_span: float = 1.2
+        span_x: float = max(x_max_bound - x_min_bound + 0.5, target_span)
+        span_y: float = max(y_max_bound - y_min_bound + 0.5, target_span)
         zoom_span: float = max(span_x, span_y)
         half_span: float = zoom_span / 2.0
 
@@ -574,10 +583,10 @@ def visualize_kap_states_and_rates(
         0, 36, 89, 133, 176, 218, 259, 316, 366, 401, 451, 495, 535, 591, 633, 674, 717, 772, 818, kap_n_ca,
     ]
 
-    base_ribbon_w: float = 5.5 if zoom else 3.5
-    kap_ribbon_alpha: float = 0.12 if zoom else 1.0
-    kap_border_alpha: float = 0.08 if zoom else 0.4
-    kap_shine_alpha: float = 0.08 if zoom else 0.55
+    base_ribbon_w: float = 4.0 if zoom else 3.5
+    kap_ribbon_alpha: float = 0.05 if zoom else 0.25
+    kap_border_alpha: float = 0.03 if zoom else 0.15
+    kap_shine_alpha: float = 0.03 if zoom else 0.20
 
     # Smooth 3D ribbon backbone trace for each HEAT repeat
     for r_idx in range(len(repeat_boundaries) - 1):
@@ -633,10 +642,10 @@ def visualize_kap_states_and_rates(
     # Highlight specific HEAT repeat regions
     dark_red_color: str = "#8B0000"
     light_red_color: str = "#FF6B6B"
-    highlight_ribbon_w: float = base_ribbon_w + 2.0
-    highlight_ribbon_alpha: float = 0.20 if zoom else 1.0
-    highlight_border_alpha: float = 0.10 if zoom else 0.5
-    highlight_shine_alpha: float = 0.12 if zoom else 0.75
+    highlight_ribbon_w: float = base_ribbon_w + 1.5
+    highlight_ribbon_alpha: float = 0.08 if zoom else 0.40
+    highlight_border_alpha: float = 0.04 if zoom else 0.20
+    highlight_shine_alpha: float = 0.04 if zoom else 0.25
 
     # HEAT 5
     seg1_start: int = heat5_range[0]
@@ -720,7 +729,7 @@ def visualize_kap_states_and_rates(
     )
 
     # State nodes: pie slices showing interacting fraction (slate blue) vs unbound fraction (empty / white background)
-    node_sizes: np.ndarray = 250.0 + 1400.0 * (stat_dist / np.max(stat_dist))
+    node_sizes: np.ndarray = (250.0 + 1400.0 * (stat_dist / np.max(stat_dist))) * state_size_factor
     node_radii: np.ndarray = np.sqrt(node_sizes) / 2.0
 
     positive_rates: np.ndarray = rate_mat[rate_mat > 0]
@@ -810,12 +819,14 @@ def visualize_kap_states_and_rates(
             )
 
         label_str: str = f"{i} (Free)" if is_free else str(i)
+        base_fontsize: float = 12.0 if is_free else 13.5
+        label_fontsize: float = base_fontsize * float(np.sqrt(state_size_factor))
         ax.annotate(
             label_str,
             (state_2d[i, 0], state_2d[i, 1]),
             ha="center",
             va="center",
-            fontsize=12.0 if is_free else 13.5,
+            fontsize=label_fontsize,
             fontweight="bold",
             color="#E53935" if is_free else "#0D1B2A",
             path_effects=[pe.withStroke(linewidth=2.5, foreground="white")],
@@ -829,8 +840,13 @@ def visualize_kap_states_and_rates(
     cbar.ax.tick_params(labelsize=15.5)
 
     title_suffix: str = " (Zoomed)" if zoom else ""
+    plot_title: str = (
+        title
+        if title is not None
+        else f"iMSM State Network & {focal_label} Transition Rates on Kap95 Structure{title_suffix}"
+    )
     ax.set_title(
-        f"iMSM State Network & {focal_label} Transition Rates on Kap95 Structure{title_suffix}",
+        plot_title,
         fontsize=20.0,
         fontweight="bold",
     )
@@ -848,17 +864,17 @@ def visualize_kap_states_and_rates(
             label="Interacting Fraction",
             markerfacecolor="#4A6572",
             markeredgecolor="#1A252C",
-            markersize=13,
+            markersize=18,
         ),
         Line2D(
             [0],
             [0],
             marker="o",
             color="w",
-            label="Unbound (Empty)",
+            label="Non-interacting Fraction",
             markerfacecolor="#F5F7FA",
             markeredgecolor="#1A252C",
-            markersize=13,
+            markersize=18,
         ),
     ]
     if len(native_state_indices) > 0:
@@ -873,10 +889,10 @@ def visualize_kap_states_and_rates(
                 markerfacecolor="none",
                 markeredgecolor="#FF8C00",
                 markeredgewidth=2.5,
-                markersize=15,
+                markersize=21,
             )
         )
-    ax.legend(handles=legend_handles + custom_proxies, loc="upper left", fontsize=14.0)
+    ax.legend(handles=legend_handles + custom_proxies, loc="upper left", fontsize=19.6)
 
     if zoom:
         ax.set_xlim(x_lim_min, x_lim_max)
@@ -945,6 +961,32 @@ def find_state_exemplar_frames(
     return state_exemplars
 
 
+def generate_interaction_colorbar(
+    output_path: str,
+    low_color: str,
+    high_color: str,
+    figsize: tuple[float, float],
+) -> None:
+    """Generate and display an interaction histogram colorbar matching the VMD color scale on log scale from 0.001 to 1.0."""
+    cmap: LinearSegmentedColormap = LinearSegmentedColormap.from_list(
+        "kap_interaction", [low_color, high_color], N=256
+    )
+    fig, ax = plt.subplots(figsize=figsize, layout="constrained")
+    norm: LogNorm = LogNorm(vmin=0.001, vmax=1.0)
+    cb = fig.colorbar(
+        plt.cm.ScalarMappable(norm=norm, cmap=cmap),
+        cax=ax,
+        orientation="horizontal",
+        ticks=[0.001, 0.01, 0.1, 1.0],
+    )
+    cb.ax.tick_params(labelsize=13.0)
+    cb.ax.set_xticklabels([r"$\leq 0.1\%$", "1%", "10%", "100%"], fontsize=13.0, fontweight="normal")
+    cb.set_label("Kap95 Interaction Frequency", fontsize=14.0, fontweight="normal", labelpad=6)
+    fig.savefig(output_path, dpi=300, bbox_inches="tight")
+    plt.show()
+    plt.close(fig)
+
+
 def generate_vmd_state_scripts(
     top_path: str,
     traj_paths: list[str],
@@ -964,6 +1006,7 @@ def generate_vmd_state_scripts(
     heat5_range: tuple[int, int],
     heat6_range: tuple[int, int],
     vmd_zoom_scale: float,
+    all_states_translate: tuple[float, float, float],
 ) -> list[dict[str, int | float]]:
     """Generate VMD Tcl scripts and interactive procedures to view and capture images of each Markov state."""
     exemplars: list[dict[str, int | float]] = find_state_exemplar_frames(
@@ -1016,6 +1059,11 @@ def generate_vmd_state_scripts(
     norm_weights: np.ndarray = kap_weights / sums
     state_xyz_angstrom: np.ndarray = np.dot(norm_weights, kap_xyz_angstrom)
 
+    # Convert interaction weights to log scale [0.001, 1.0] -> normalized [0.0, 1.0] Beta field for VMD
+    log_weights: np.ndarray = np.zeros_like(kap_weights)
+    valid_mask: np.ndarray = kap_weights >= 0.001
+    log_weights[valid_mask] = np.clip((np.log10(kap_weights[valid_mask]) + 3.0) / 3.0, 0.0, 1.0)
+
     bound_mask: np.ndarray = (
         np.ones(cluster_centers.shape[0], dtype=bool)
         if free_state_idx is None
@@ -1040,6 +1088,36 @@ def generate_vmd_state_scripts(
     snapshots_dir: str = os.path.abspath(os.path.join(output_dir, "snapshots"))
     os.makedirs(snapshots_dir, exist_ok=True)
 
+    # Generate and display single shared interaction colorbar across all states (log scale 0.001 to 1.0)
+    colorbar_path: str = os.path.join(snapshots_dir, "interaction_colorbar.png")
+    generate_interaction_colorbar(
+        output_path=colorbar_path,
+        low_color="#78909C",
+        high_color="#D32F2F",
+        figsize=(6.5, 0.75),
+    )
+
+    # Color IDs palette for distinguishing states in all-states overlay (strictly non-red to preserve HEAT 5/6 red contrast)
+    state_color_ids: list[int] = [3, 0, 7, 11, 10, 12, 14, 13, 15, 5]
+
+    # Precompute 1024-step color scale in Python and hardcode into VMD script (Slate Gray #78909C -> Red #D32F2F)
+    low_rgb: tuple[float, float, float] = (0.470, 0.565, 0.612)
+    high_rgb: tuple[float, float, float] = (0.827, 0.184, 0.184)
+    n_vmd_colors: int = 1024
+    color_scale_lines: list[str] = [
+        "proc apply_custom_colorscale {} {",
+        "    color scale midpoint 0.5",
+        "    color scale min 0.0",
+        "    color scale max 1.0",
+    ]
+    for i in range(n_vmd_colors):
+        t_val: float = i / float(n_vmd_colors - 1)
+        r_val: float = low_rgb[0] + t_val * (high_rgb[0] - low_rgb[0])
+        g_val: float = low_rgb[1] + t_val * (high_rgb[1] - low_rgb[1])
+        b_val: float = low_rgb[2] + t_val * (high_rgb[2] - low_rgb[2])
+        color_scale_lines.append(f"    color change rgb {33 + i} {r_val:.4f} {g_val:.4f} {b_val:.4f}")
+    color_scale_lines.append("}")
+
     # Generate master Tcl script
     master_script_lines: list[str] = [
         "# ==============================================================================",
@@ -1047,112 +1125,170 @@ def generate_vmd_state_scripts(
         f"# Focal Component: {focal_label} ({focal_names_str})",
         "# ==============================================================================",
         "",
-        "proc setup_msm_representations {} {",
-        "    # Remove existing representations",
-        "    set nreps [molinfo top get numreps]",
-        "    for {set i [expr {$nreps - 1}]} {$i >= 0} {incr i -1} {",
-        "        mol delrep $i top",
-        "    }",
-        "",
-        "    # Define color palette matching 2D network plot",
-        "    color change rgb 1 0.545 0.000 0.000   ;# HEAT 5: Dark Red (#8B0000)",
-        "    color change rgb 9 1.000 0.420 0.420   ;# HEAT 6: Light Red (#FF6B6B)",
-        "    color change rgb 6 0.470 0.565 0.612   ;# Kap95 Non-HEAT: Slate Gray (#78909C)",
-        "    color change rgb 3 1.000 0.549 0.000   ;# Focal Bead: Deep Orange (#FF8C00)",
-        "    color change rgb 7 0.078 0.612 0.149   ;# FG Chain 1: Green (#149C26)",
-        "    color change rgb 2 0.750 0.750 0.750   ;# FG Chain 2: Light Gray",
-        "    color change rgb 8 1.000 1.000 1.000   ;# Background: Pure White",
-        "",
-        "    # 1. Kap95 Non-HEAT Backbone - Transparent Silver/Slate",
-        "    mol representation NewCartoon 0.28 10.0 4.1 0",
-        "    mol color ColorID 6",
-        f'    mol selection "protein and resid 1 to 861 and not (resid {heat5_range[0]} to {heat5_range[1]} or resid {heat6_range[0]} to {heat6_range[1]})"',
-        "    mol material Transparent",
-        "    mol addrep top",
-        "",
-        f"    # 2. HEAT Repeat 5 (resid {heat5_range[0]} to {heat5_range[1]}) - Solid Dark Red",
-        "    mol representation NewCartoon 0.45 10.0 4.1 0",
-        "    mol color ColorID 1",
-        f'    mol selection "resid {heat5_range[0]} to {heat5_range[1]}"',
-        "    mol material Glossy",
-        "    mol addrep top",
-        "",
-        f"    # 3. HEAT Repeat 6 (resid {heat6_range[0]} to {heat6_range[1]}) - Solid Light Red",
-        "    mol representation NewCartoon 0.45 10.0 4.1 0",
-        "    mol color ColorID 9",
-        f'    mol selection "resid {heat6_range[0]} to {heat6_range[1]}"',
-        "    mol material Glossy",
-        "    mol addrep top",
-        "",
-        f"    # 4. FG Chain 1 Focal Flanking Segment (resid {focal_res_min} to {focal_res_max}, +/-5 aa) - Solid Smooth Tube",
-        "    mol representation Tube 0.35 16.0",
-        "    mol color ColorID 7",
-        f'    mol selection "resid {focal_res_min} to {focal_res_max}"',
-        "    mol material AOChalky",
-        "    mol addrep top",
-        "",
-        f"    # 5. FG Chain 1 Rest of Chain - Transparent Smooth Tube",
-        "    mol representation Tube 0.25 16.0",
-        "    mol color ColorID 7",
-        f'    mol selection "resid 862 to 986 and not (resid {focal_res_min} to {focal_res_max})"',
-        "    mol material Transparent",
-        "    mol addrep top",
-        "",
-        f"    # 6. Focal FG Bead ({focal_names_str}) - Prominent Solid Orange Sphere",
-        "    mol representation VDW 0.90 24.0",
-        "    mol color ColorID 3",
-        f'    mol selection "({focal_res_sel_str}) and name CA"',
-        "    mol material Glossy",
-        "    mol addrep top",
-        "",
-        "    # 7. FG Chain 2 (resid 987 to 1111) - Subtle Transparent Smooth Tube",
-        "    mol representation Tube 0.20 16.0",
-        "    mol color ColorID 2",
-        '    mol selection "resid 987 to 1111"',
-        "    mol material Transparent",
-        "    mol addrep top",
-        "",
-        "    # Display settings matching 2D plot projection",
-        "    display projection Orthographic",
-        "    display depthcue off",
-        "    display backgroundgradient off",
-        "    color Display Background white",
-        "    axes location off",
-        "}",
-        "",
-        "proc align_heat_to_reference {} {",
-        "    set cur_frame [molinfo top get frame]",
-        f'    set sel_ref [atomselect top "protein and (resid {heat5_range[0]} to {heat5_range[1]} or resid {heat6_range[0]} to {heat6_range[1]}) and name CA" frame 0]',
-        f'    set sel_cur [atomselect top "protein and (resid {heat5_range[0]} to {heat5_range[1]} or resid {heat6_range[0]} to {heat6_range[1]}) and name CA" frame $cur_frame]',
-        "    set trans_mat [measure fit $sel_cur $sel_ref]",
-        '    set move_all [atomselect top "all" frame $cur_frame]',
-        "    $move_all move $trans_mat",
-        "    $sel_ref delete",
-        "    $sel_cur delete",
-        "    $move_all delete",
-        "}",
-        "",
-        "proc align_view_to_state {rot_x rot_y rot_z zoom_scale} {",
-        "    align_heat_to_reference",
-        f'    set heat_sel [atomselect top "protein and (resid {heat5_range[0]} to {heat5_range[1]} or resid {heat6_range[0]} to {heat6_range[1]}) and name CA" frame 0]',
-        "    set heat_center [measure center $heat_sel]",
-        "    $heat_sel delete",
-        "    molinfo top set center [list $heat_center]",
-        "    display resetview",
-        "    molinfo top set center [list $heat_center]",
-        "    rotate y by $rot_y",
-        "    rotate x by $rot_x",
-        "    rotate z by $rot_z",
-        "    scale by $zoom_scale",
-        "}",
-        "",
-        "proc view_state {state_id} {",
-        "    setup_msm_representations",
-        "    switch -- $state_id {",
+        "# Per-state Kap95 residue log-scaled interaction weights (0.0 = <=0.001, 1.0 = 1.0)",
     ]
 
     for ex in exemplars:
         s_id: int = int(ex["state_id"])
+        state_weights_str: str = " ".join(f"{float(w):.4f}" for w in log_weights[s_id, :])
+        master_script_lines.append(f"set state_{s_id}_kap_weights [list {state_weights_str}]")
+
+    master_script_lines.extend(
+        [
+            "",
+            "proc apply_state_kap_weights {weights_list} {",
+            '    set sel_ref [atomselect top "protein and resid 1 to 861" frame 0]',
+            "    set res_list [$sel_ref get resid]",
+            "    set beta_vals [list]",
+            "    set n_weights [llength $weights_list]",
+            "    foreach r $res_list {",
+            "        set idx [expr {$r - 1}]",
+            "        if {$idx >= 0 && $idx < $n_weights} {",
+            "            lappend beta_vals [lindex $weights_list $idx]",
+            "        } else {",
+            "            lappend beta_vals 0.0",
+            "        }",
+            "    }",
+            "    $sel_ref delete",
+            "",
+            "    set num_frames [molinfo top get numframes]",
+            "    for {set f 0} {$f < $num_frames} {incr f} {",
+            '        set sel_f [atomselect top "protein and resid 1 to 861" frame $f]',
+            "        $sel_f set beta $beta_vals",
+            "        $sel_f delete",
+            "    }",
+            "}",
+            "",
+        ]
+    )
+
+    master_script_lines.extend(color_scale_lines)
+
+    master_script_lines.extend(
+        [
+            "",
+            "proc setup_msm_representations {} {",
+            "    # Remove existing representations",
+            "    set nreps [molinfo top get numreps]",
+            "    for {set i [expr {$nreps - 1}]} {$i >= 0} {incr i -1} {",
+            "        mol delrep $i top",
+            "    }",
+            "",
+            "    # Define color palette matching 2D network plot",
+            "    color change rgb 7 0.078 0.612 0.149   ;# Focal FSFG Motif: Green (#149C26)",
+            "    color change rgb 2 0.750 0.750 0.750   ;# FG Chain 2: Light Gray",
+            "    color change rgb 8 1.000 1.000 1.000   ;# Background: Pure White",
+            "",
+            "    # Tune material transparency for background Kap95 ribbon (more transparent)",
+            "    material change opacity Transparent 0.25",
+            "",
+            f"    # 1. Background Kap95 Non-HEAT Ribbon - Semi-Transparent Colored by Interaction Frequency",
+            "    mol representation NewCartoon 0.28 10.0 4.1 0",
+            "    mol color Beta",
+            f'    mol selection "protein and resid 1 to 861 and not (resid {heat5_range[0]} to {heat5_range[1]} or resid {heat6_range[0]} to {heat6_range[1]})"',
+            "    mol material Transparent",
+            "    mol addrep top",
+            "    set kap_rep_idx [expr {[molinfo top get numreps] - 1}]",
+            "    mol scaleminmax top $kap_rep_idx 0.0 1.0",
+            "",
+            f"    # 2. HEAT Repeats 5 & 6 (resid {heat5_range[0]} to {heat5_range[1]} & {heat6_range[0]} to {heat6_range[1]}) - OPAQUE Solid Ribbon Colored by Interaction Frequency",
+            "    mol representation NewCartoon 0.45 10.0 4.1 0",
+            "    mol color Beta",
+            f'    mol selection "protein and (resid {heat5_range[0]} to {heat5_range[1]} or resid {heat6_range[0]} to {heat6_range[1]})"',
+            "    mol material AOChalky",
+            "    mol addrep top",
+            "    set heat_rep_idx [expr {[molinfo top get numreps] - 1}]",
+            "    mol scaleminmax top $heat_rep_idx 0.0 1.0",
+            "",
+            f"    # 3. Focal FSFG 4 AAs ({focal_names_str}) Backbone - Solid Green Tube",
+            "    mol representation Tube 0.35 16.0",
+            "    mol color ColorID 7",
+            f'    mol selection "({focal_res_sel_str})"',
+            "    mol material AOChalky",
+            "    mol addrep top",
+            "",
+            f"    # 4. Focal FSFG 4 AAs ({focal_names_str}) Side Chains (No Hydrogen) - Green Licorice",
+            "    mol representation Licorice 0.28 12.0 12.0",
+            "    mol color ColorID 7",
+            f'    mol selection "({focal_res_sel_str}) and not hydrogen and (sidechain or name CA)"',
+            "    mol material Glossy",
+            "    mol addrep top",
+            "",
+            f"    # 5. Rest of FG Chain 1 - Transparent Smooth Tube",
+            "    mol representation Tube 0.22 16.0",
+            "    mol color ColorID 7",
+            f'    mol selection "resid 862 to 986 and not ({focal_res_sel_str})"',
+            "    mol material Transparent",
+            "    mol addrep top",
+            "",
+            "    # 6. FG Chain 2 (resid 987 to 1111) - Subtle Transparent Smooth Tube",
+            "    mol representation Tube 0.20 16.0",
+            "    mol color ColorID 2",
+            '    mol selection "resid 987 to 1111"',
+            "    mol material Transparent",
+            "    mol addrep top",
+            "",
+            "    # Apply custom color scale after all representations are created so VMD does not overwrite it",
+            "    apply_custom_colorscale",
+            "",
+            "    # Display settings matching 2D plot projection",
+            "    display projection Orthographic",
+            "    display depthcue off",
+            "    display backgroundgradient off",
+            "    color Display Background white",
+            "    axes location off",
+            "}",
+            "",
+            "set exemplars_aligned 0",
+            "proc align_all_exemplar_frames {} {",
+            "    if {$::exemplars_aligned} {",
+            "        return",
+            "    }",
+            f'    set sel_ref [atomselect top "protein and (resid {heat5_range[0]} to {heat5_range[1]} or resid {heat6_range[0]} to {heat6_range[1]}) and name CA" frame 0]',
+            f"    set exemplar_frames [list {' '.join(str(e['mid_frame']) for e in exemplars)}]",
+            "    foreach f $exemplar_frames {",
+            "        if {$f != 0} {",
+            f'            set sel_cur [atomselect top "protein and (resid {heat5_range[0]} to {heat5_range[1]} or resid {heat6_range[0]} to {heat6_range[1]}) and name CA" frame $f]',
+            "            set trans_mat [measure fit $sel_cur $sel_ref]",
+            '            set move_all [atomselect top "all" frame $f]',
+            "            $move_all move $trans_mat",
+            "            $sel_cur delete",
+            "            $move_all delete",
+            "        }",
+            "    }",
+            "    # Translate frame 0 and all exemplar frames so the HEAT 5/6 midpoint is exactly at (0, 0, 0)",
+            "    set heat_center [measure center $sel_ref]",
+            "    set shift [vecscale -1.0 $heat_center]",
+            "    set all_frames_to_shift [lsort -unique [concat $exemplar_frames 0]]",
+            "    foreach f $all_frames_to_shift {",
+            '        set move_all [atomselect top "all" frame $f]',
+            "        $move_all moveby $shift",
+            "        $move_all delete",
+            "    }",
+            "    $sel_ref delete",
+            "    set ::exemplars_aligned 1",
+            "}",
+            "",
+            "proc align_view_to_state {rot_x rot_y rot_z zoom_scale} {",
+            "    align_all_exemplar_frames",
+            "    display resetview",
+            "    translate to 0.0 0.0 0.0",
+            "    molinfo top set center [list {0.0 0.0 0.0}]",
+            "    rotate y by $rot_y",
+            "    rotate x by $rot_x",
+            "    rotate z by $rot_z",
+            "    scale by $zoom_scale",
+            f"    translate by {all_states_translate[0]:.2f} {all_states_translate[1]:.2f} {all_states_translate[2]:.2f}",
+            "}",
+            "",
+            "proc view_state {state_id} {",
+            "    setup_msm_representations",
+            "    switch -- $state_id {",
+        ]
+    )
+
+    for ex in exemplars:
+        s_id = int(ex["state_id"])
         f_mid: int = int(ex["mid_frame"])
         t_ns: float = float(ex["sim_time_ns"])
         t_us: float = float(ex["sim_time_us"])
@@ -1161,7 +1297,10 @@ def generate_vmd_state_scripts(
             [
                 f"        {s_id} {{",
                 f"            animate goto {f_mid}",
+                f"            apply_state_kap_weights $::state_{s_id}_kap_weights",
+                "            apply_custom_colorscale",
                 f"            align_view_to_state {effective_rot_x:.1f} {effective_rot_y:.1f} {effective_rot_z:.1f} {vmd_zoom_scale:.2f}",
+                "            display update",
                 f'            puts ">> Viewing Markov State {s_id}: Frame {f_mid} ({t_ns:.1f} ns / {t_us:.2f} us)"',
                 "        }",
             ]
@@ -1173,6 +1312,123 @@ def generate_vmd_state_scripts(
             f'            puts "Error: Unknown state_id $state_id. Available states: 0 to {len(exemplars)-1}"',
             "        }",
             "    }",
+            "}",
+            "",
+            "proc setup_all_states_representations {} {",
+            "    # Remove existing representations",
+            "    set nreps [molinfo top get numreps]",
+            "    for {set i [expr {$nreps - 1}]} {$i >= 0} {incr i -1} {",
+            "        mol delrep $i top",
+            "    }",
+            "",
+            "    # Define color palette (HEAT 5/6 red tones + distinct non-red colors for Markov states)",
+            "    color change rgb 1 0.545 0.000 0.000   ;# HEAT 5: Dark Red (#8B0000)",
+            "    color change rgb 9 1.000 0.420 0.420   ;# HEAT 6: Light Red (#FF6B6B)",
+            "    color change rgb 6 0.470 0.565 0.612   ;# Kap95 Non-HEAT: Slate Gray (#78909C)",
+            "    color change rgb 3 1.000 0.549 0.000   ;# Orange (#FF8C00)",
+            "    color change rgb 0 0.118 0.533 0.898   ;# Blue (#1E88E5)",
+            "    color change rgb 7 0.078 0.612 0.149   ;# Green (#149C26)",
+            "    color change rgb 11 0.557 0.141 0.667  ;# Purple (#8E24AA)",
+            "    color change rgb 10 0.000 0.675 0.757  ;# Cyan (#00ACC1)",
+            "    color change rgb 12 0.486 0.702 0.259  ;# Lime (#7CB342)",
+            "    color change rgb 14 1.000 0.702 0.000  ;# Amber (#FFB300)",
+            "    color change rgb 13 0.671 0.278 0.737  ;# Mauve (#AB47BC)",
+            "    color change rgb 15 0.149 0.776 0.855  ;# Iceblue (#26C6DA)",
+            "    color change rgb 5 0.000 0.537 0.482   ;# Teal (#00897B)",
+            "",
+            "    # Tune material transparency for background Kap95 ribbon (more transparent)",
+            "    material change opacity Transparent 0.25",
+            "",
+            "    # Create dedicated slightly transparent material for multi-state FSFGs with smooth shading",
+            '    if {[lsearch [material list] "FSFGTrans"] == -1} {',
+            "        material add FSFGTrans copy AOChalky",
+            "    }",
+            "    material change opacity FSFGTrans 0.80",
+            "    material change ambient FSFGTrans 0.25",
+            "    material change diffuse FSFGTrans 0.75",
+            "    material change specular FSFGTrans 0.10",
+            "    material change shininess FSFGTrans 0.20",
+            "",
+            "    # 1. Native Kap95 Non-HEAT (Frame 0) - Transparent Silver/Slate Ribbon",
+            "    mol representation NewCartoon 0.28 10.0 4.1 0",
+            "    mol color ColorID 6",
+            f'    mol selection "protein and resid 1 to 861 and not (resid {heat5_range[0]} to {heat5_range[1]} or resid {heat6_range[0]} to {heat6_range[1]})"',
+            "    mol material Transparent",
+            "    mol addrep top",
+            "    set kap_rep_idx [expr {[molinfo top get numreps] - 1}]",
+            '    mol drawframes top $kap_rep_idx "0"',
+            "",
+            f"    # 2. Native HEAT Repeat 5 (resid {heat5_range[0]} to {heat5_range[1]}) - Solid Dark Red Ribbon",
+            "    mol representation NewCartoon 0.45 10.0 4.1 0",
+            "    mol color ColorID 1",
+            f'    mol selection "resid {heat5_range[0]} to {heat5_range[1]}"',
+            "    mol material Glossy",
+            "    mol addrep top",
+            "    set h5_rep_idx [expr {[molinfo top get numreps] - 1}]",
+            '    mol drawframes top $h5_rep_idx "0"',
+            "",
+            f"    # 3. Native HEAT Repeat 6 (resid {heat6_range[0]} to {heat6_range[1]}) - Solid Light Red Ribbon",
+            "    mol representation NewCartoon 0.45 10.0 4.1 0",
+            "    mol color ColorID 9",
+            f'    mol selection "resid {heat6_range[0]} to {heat6_range[1]}"',
+            "    mol material Glossy",
+            "    mol addrep top",
+            "    set h6_rep_idx [expr {[molinfo top get numreps] - 1}]",
+            '    mol drawframes top $h6_rep_idx "0"',
+            "",
+        ]
+    )
+
+    # Add only the 4 focal FSFG AAs for each Markov state on its exemplar frame (slightly transparent)
+    for idx_ex, ex in enumerate(exemplars):
+        s_id = int(ex["state_id"])
+        f_mid = int(ex["mid_frame"])
+        color_id: int = state_color_ids[idx_ex % len(state_color_ids)]
+
+        master_script_lines.extend(
+            [
+                f"    # State {s_id} (Frame {f_mid}) - Focal FSFG 4 AAs ({focal_names_str}) Backbone Tube (Slightly Transparent)",
+                "    mol representation Tube 0.35 16.0",
+                f"    mol color ColorID {color_id}",
+                f'    mol selection "({focal_res_sel_str})"',
+                "    mol material FSFGTrans",
+                "    mol addrep top",
+                "    set r_idx [expr {[molinfo top get numreps] - 1}]",
+                f'    mol drawframes top $r_idx "{f_mid}"',
+                "",
+                f"    # State {s_id} (Frame {f_mid}) - Focal FSFG 4 AAs Side Chains Licorice (Slightly Transparent)",
+                "    mol representation Licorice 0.28 12.0 12.0",
+                f"    mol color ColorID {color_id}",
+                f'    mol selection "({focal_res_sel_str}) and not hydrogen and (sidechain or name CA)"',
+                "    mol material FSFGTrans",
+                "    mol addrep top",
+                "    set r_idx [expr {[molinfo top get numreps] - 1}]",
+                f'    mol drawframes top $r_idx "{f_mid}"',
+                "",
+            ]
+        )
+
+    master_script_lines.extend(
+        [
+            "    # Display settings",
+            "    display projection Orthographic",
+            "    display depthcue off",
+            "    display backgroundgradient off",
+            "    display culling on",
+            "    display rendermode GLSL",
+            "    color Display Background white",
+            "    axes location off",
+            "}",
+            "",
+            "# Apply custom color scale globally on script load",
+            "apply_custom_colorscale",
+            "",
+            "proc view_all_states {} {",
+            "    align_all_exemplar_frames",
+            "    setup_all_states_representations",
+            "    animate goto 0",
+            f"    align_view_to_state {effective_rot_x:.1f} {effective_rot_y:.1f} {effective_rot_z:.1f} {vmd_zoom_scale:.2f}",
+            '    puts ">> Viewing All Markov States Overlay on Native Kap95 Structure"',
             "}",
             "",
             "proc render_state_png {filename} {",
@@ -1202,6 +1458,7 @@ def generate_vmd_state_scripts(
             "",
             "proc render_all_states {out_dir} {",
             "    file mkdir $out_dir",
+            "    align_all_exemplar_frames",
             f"    foreach s {{{' '.join(str(e['state_id']) for e in exemplars)}}} {{",
             "        view_state $s",
             "        display update",
@@ -1210,6 +1467,13 @@ def generate_vmd_state_scripts(
             "        render_state_png $filename",
             '        puts ">> Rendered and saved: $filename"',
             "    }",
+            "    # Render 1 additional image showing all states at once on native structure",
+            "    view_all_states",
+            "    display update",
+            "    after 300",
+            '    set all_filename [format "%s/all_states.png" $out_dir]',
+            "    render_state_png $all_filename",
+            '    puts ">> Rendered and saved all states overlay: $all_filename"',
             '    puts ">> Done rendering all states!"',
             "}",
             "",
@@ -1217,12 +1481,15 @@ def generate_vmd_state_scripts(
             "display projection Orthographic",
             "display depthcue off",
             "display backgroundgradient off",
+            "display culling on",
+            "display rendermode GLSL",
             "color Display Background white",
             "axes location off",
             "",
             'puts "================================================================="',
             'puts "iMSM VMD State Visualization Tools Loaded!"',
             'puts "  - Use: view_state <state_id>   (e.g., view_state 0)"',
+            'puts "  - Use: view_all_states         (Overlay all states on native Kap95)"',
             f'puts "  - Use: render_all_states \\"{snapshots_dir}\\""',
             'puts "================================================================="',
         ]
@@ -1251,9 +1518,22 @@ def generate_vmd_state_scripts(
         with open(state_script_path, "w") as f_state:
             f_state.write("\n".join(single_state_lines) + "\n")
 
+    # Generate standalone .vmd file for all states overlay
+    all_states_script_lines: list[str] = [
+        "# Standalone VMD script for All Markov States Overlay on Native Kap95",
+        "",
+        f"source {os.path.abspath(master_script_path)}",
+        "view_all_states",
+        f'render_state_png "{snapshots_dir}/all_states.png"',
+    ]
+    all_states_script_path: str = os.path.join(output_dir, "all_states.vmd")
+    with open(all_states_script_path, "w") as f_all:
+        f_all.write("\n".join(all_states_script_lines) + "\n")
+
     print("\n=================================================================")
     print(f"Generated VMD State Visualizations in: {output_dir}")
     print(f"Master script: {master_script_path}")
+    print(f"All-states script: {all_states_script_path}")
     print("-----------------------------------------------------------------")
     print(f"{'State':<7}{'Mid Frame':<12}{'Sim Time (ns)':<16}{'Sim Time (µs)':<16}{'Centroid Dist':<16}")
     print("-----------------------------------------------------------------")
@@ -1264,3 +1544,4 @@ def generate_vmd_state_scripts(
     print("=================================================================\n")
 
     return exemplars
+
