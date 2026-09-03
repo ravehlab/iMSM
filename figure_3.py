@@ -31,7 +31,8 @@ fig = comparison_plot(
     swap_axes=True,
     add_mini_titles=False,
     add_nucleus_cytoplasm_text=True,
-    nucleus_cytoplasm_fontsize=36
+    nucleus_cytoplasm_top_row_only=True,
+    nucleus_cytoplasm_fontsize=54
 )
 save_path = "/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/plots/figure_3/panel_a"
 os.makedirs(os.path.dirname(save_path), exist_ok=True)

@@ -1171,7 +1171,7 @@ def plot_md_vs_msm_convergence():
             y_text_plot = y_text * 1.25
             label_text = f'{s_val}x speedup'
             if x_text >= 30 and y_text_plot >= 30:
-                ax.text(x_text, y_text_plot, label_text, rotation=45, color='gray', alpha=0.6, fontsize=15, ha='center', va='center')
+                ax.text(x_text, y_text_plot, label_text, rotation=45, color='gray', alpha=0.6, fontsize=18, ha='center', va='center')
 
     # Color palette
     colors = ['#440154', '#3b528b', '#21918c', '#5ec962', '#fde725'] # Viridis
@@ -1234,7 +1234,7 @@ def plot_md_vs_msm_convergence():
         bbox_to_anchor=(0.5, -0.20),
         ncol=2,
         frameon=True,
-        fontsize=12,
+        fontsize=18,
         columnspacing=2.0,
         handletextpad=0.5
     )

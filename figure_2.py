@@ -47,7 +47,9 @@ for n_sites in [4, 6]:
         include_unbound_states=True,
         include_mid_channel=False,
         right_to_left=True if n_sites == 4 else False,
-        center_labels=True
+        center_labels=True,
+        nup_label_fontsize=30,
+        nup_label_fontfamily="Roboto Condensed"
     )
     save_path = f"/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/plots/figure_2/panel_b_{n_sites}"
     os.makedirs(os.path.dirname(save_path), exist_ok=True)

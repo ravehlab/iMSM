@@ -1025,7 +1025,7 @@ def visualize_vector_field_mesostates(P, fig, ax, good_cluster_indices, mus, sho
         if show_colorbar_title:
             cbar.ax.set_title(r'Net Rate $\log_{10} (\frac{1}{\mu s})$', fontsize=14)
 
-def comparison_plot(base_tm_path, base_cluster_path, radii, n_sites, title, in_out_flow=None, ignored_nup_types=None, add_mini_titles=False, pie_scaling=15, min_rate=0.01, max_rate=5, time_step_us=5, show_scale_bars=True, swap_axes=False, use_actual_mus_path=None, dots_only=False, add_nucleus_cytoplasm_text=True, nucleus_cytoplasm_fontsize=36):
+def comparison_plot(base_tm_path, base_cluster_path, radii, n_sites, title, in_out_flow=None, ignored_nup_types=None, add_mini_titles=False, pie_scaling=15, min_rate=0.01, max_rate=5, time_step_us=5, show_scale_bars=True, swap_axes=False, use_actual_mus_path=None, dots_only=False, add_nucleus_cytoplasm_text=True, nucleus_cytoplasm_top_row_only=False, nucleus_cytoplasm_fontsize=36):
     n_samples = 2000
     
     # 1. Determine figure grid dimensions based on the swap_axes argument
@@ -1109,7 +1109,8 @@ def comparison_plot(base_tm_path, base_cluster_path, radii, n_sites, title, in_o
             show_colorbar = (row_idx == 0 and col_idx == fig_x - 1)  
             
             visualize_arrows_between_mesostates(P, fig, ax, good_mesostate_indices, mus, show_colorbar_title=False, in_out_flow=in_out_flow, show_colorbar=show_colorbar, min_rate=min_rate, max_rate=max_rate, time_step_us=time_step_us)
-            visualize_pie_mesostates(clusters, P, ax, good_mesostate_indices, mus, PIE_COLORS, add_nucleus_cytoplasm_text=add_nucleus_cytoplasm_text, pie_scaling=pie_scaling, dots_only=dots_only, nucleus_cytoplasm_fontsize=nucleus_cytoplasm_fontsize)
+            show_nc_text = add_nucleus_cytoplasm_text and (not nucleus_cytoplasm_top_row_only or row_idx == 0)
+            visualize_pie_mesostates(clusters, P, ax, good_mesostate_indices, mus, PIE_COLORS, add_nucleus_cytoplasm_text=show_nc_text, pie_scaling=pie_scaling, dots_only=dots_only, nucleus_cytoplasm_fontsize=nucleus_cytoplasm_fontsize)
             add_npc_scaffold_picture(ax)
             ax.set_aspect('equal', adjustable='box')
     return fig
@@ -1133,6 +1134,7 @@ def comparison_plot_custom(
     use_actual_mus_paths: Optional[List[str]],
     dots_only: bool,
     add_nucleus_cytoplasm_text: bool = True,
+    nucleus_cytoplasm_top_row_only: bool = False,
     nucleus_cytoplasm_fontsize: int = 36,
 ) -> plt.Figure:
     n_samples: int = 2000
@@ -1207,7 +1209,8 @@ def comparison_plot_custom(
         show_colorbar: bool = (row_idx == 0 and col_idx == n_cols - 1)
         
         visualize_arrows_between_mesostates(P, fig, ax, good_mesostate_indices, mus, show_colorbar_title=False, in_out_flow=in_out_flow, show_colorbar=show_colorbar, min_rate=min_rate, max_rate=max_rate, time_step_us=time_step_us)
-        visualize_pie_mesostates(clusters, P, ax, good_mesostate_indices, mus, pie_colors, add_nucleus_cytoplasm_text=add_nucleus_cytoplasm_text, pie_scaling=pie_scaling, dots_only=dots_only, nucleus_cytoplasm_fontsize=nucleus_cytoplasm_fontsize)
+        show_nc_text: bool = add_nucleus_cytoplasm_text and (not nucleus_cytoplasm_top_row_only or row_idx == 0)
+        visualize_pie_mesostates(clusters, P, ax, good_mesostate_indices, mus, pie_colors, add_nucleus_cytoplasm_text=show_nc_text, pie_scaling=pie_scaling, dots_only=dots_only, nucleus_cytoplasm_fontsize=nucleus_cytoplasm_fontsize)
         add_npc_scaffold_picture(ax)
         ax.set_aspect('equal', adjustable='box')
         

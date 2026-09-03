@@ -157,7 +157,7 @@ LAYER_BEAD_AMOUNTS = {
 }
 
 def visualize_stationary_distribution(base_tm_path, base_clustering_path, base_clustered_path,
-                                      r, n, title, x_limits=(0, 0.05), use_energy=False, add_number_labels=True, add_bead_amounts=False, include_stationary=True, include_unbound_states=True, include_mid_channel=True, right_to_left=False, center_labels=False):
+                                      r, n, title, x_limits=(0, 0.05), use_energy=False, add_number_labels=True, add_bead_amounts=False, include_stationary=True, include_unbound_states=True, include_mid_channel=True, right_to_left=False, center_labels=False, nup_label_fontsize=28, nup_label_fontfamily="Roboto Condensed"):
     tm_path = base_tm_path.replace("#r#", str(r)).replace("#n#", str(n))
     clustering_path = base_clustering_path.replace("#r#", str(r)).replace("#n#", str(n))
     clustered_path = base_clustered_path.replace("#r#", str(r)).replace("#n#", str(n))
@@ -252,7 +252,7 @@ def visualize_stationary_distribution(base_tm_path, base_clustering_path, base_c
         h_align = 'left' if right_to_left else 'right'
         y_pad = 4
         
-    ax.set_yticklabels(labels, fontsize=23, ha=h_align)
+    ax.set_yticklabels(labels, fontsize=nup_label_fontsize, fontfamily=nup_label_fontfamily, ha=h_align)
     ax.tick_params(axis='y', pad=y_pad)
     ax.tick_params(axis='x', labelsize=24)
     
