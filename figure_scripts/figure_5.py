@@ -25,7 +25,7 @@ from iMSM.extensions.npc.npc_graph_figure import comparison_plot_custom, compari
 # %% panel a
 # generate_free_energy_data()
 fig = plot_z0_free_energy_vs_mw()
-save_path = "/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/plots/figure_5/panel_a"
+save_path = "plots/figure_5/panel_a"
 os.makedirs(os.path.dirname(save_path), exist_ok=True)
 fig.savefig(save_path + ".png", bbox_inches='tight', dpi=300)
 
@@ -70,7 +70,7 @@ fig_b = comparison_vertical_plot(
     legend_bbox_to_anchor=(0.05, 0.98),
     show_pore_residency=True
 )
-save_path_b = "/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/plots/figure_5/panel_b"
+save_path_b = "plots/figure_5/panel_b"
 os.makedirs(os.path.dirname(save_path_b), exist_ok=True)
 fig_b.savefig(save_path_b + ".png", bbox_inches='tight', dpi=300)
 
@@ -98,7 +98,7 @@ fig_c = comparison_vertical_plot(
     legend_bbox_to_anchor=(0.05, 0.96),
     show_colorbar=False
 )
-save_path_c = "/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/plots/figure_5/panel_c"
+save_path_c = "plots/figure_5/panel_c"
 os.makedirs(os.path.dirname(save_path_c), exist_ok=True)
 fig_c.savefig(save_path_c + ".png", bbox_inches='tight', dpi=300)
 
@@ -126,6 +126,6 @@ fig_d = comparison_vertical_plot(
     legend_bbox_to_anchor=(0.05, 0.96),
     show_colorbar=False
 )
-save_path_d = "/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/plots/figure_5/panel_d"
+save_path_d = "plots/figure_5/panel_d"
 os.makedirs(os.path.dirname(save_path_d), exist_ok=True)
 fig_d.savefig(save_path_d + ".png", bbox_inches='tight', dpi=300)

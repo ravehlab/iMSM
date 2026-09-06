@@ -174,7 +174,7 @@ def generate_free_energy_data() -> None:
     radius_list: List[int] = [10, 14, 18, 22, 26]
     num_sim_folders: int = 30
     
-    DATA_DIR: str = "/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/data/023_EXP_stair"
+    DATA_DIR: str = "data/023_EXP_stair"
     os.makedirs(os.path.join(DATA_DIR, "landscapes"), exist_ok=True)
     
     results_list: List[Dict[str, Any]] = []
@@ -190,7 +190,7 @@ def generate_free_energy_data() -> None:
             for radius in radius_list:
                 mol_name: str = f"{sites}_{radius}{suffix}"
                 unique_name: str = f"{diameter}nm_{sites}_{radius}{suffix}"
-                base_coords_dir: str = f"/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/data/{dir_name}/{mol_name}/1_single_sim_kap_coords"
+                base_coords_dir: str = f"data/{dir_name}/{mol_name}/1_single_sim_kap_coords"
                 
                 if not os.path.exists(base_coords_dir):
                     print(f"Skipping {mol_name} (directory does not exist: {base_coords_dir})")
@@ -259,8 +259,8 @@ def plot_z0_free_energy_vs_mw() -> None:
     """
     Plots 1D free energy at z=0 vs Molecular Weight.
     """
-    results_path: str = "/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/data/023_EXP_stair/results.pickle"
-    plot_output_path: str = "/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/plots/023_EXP_stair_z0_plot.png"
+    results_path: str = "data/023_EXP_stair/results.pickle"
+    plot_output_path: str = "plots/023_EXP_stair_z0_plot.png"
     
     if not os.path.exists(results_path):
         print(f"Results file not found for plotting: {results_path}")
@@ -543,7 +543,7 @@ def plot_all_1d_landscapes() -> Any:
     """
     Plots all 1D landscapes per site variant.
     """
-    results_path: str = "/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/data/023_EXP_stair/results.pickle"
+    results_path: str = "data/023_EXP_stair/results.pickle"
     
     if not os.path.exists(results_path):
         print(f"Results file not found for plotting: {results_path}")
@@ -560,7 +560,11 @@ def plot_all_1d_landscapes() -> Any:
     for item in results_data:
         landscape_path: str = item.get("landscape_file", "")
         if not landscape_path or not os.path.exists(landscape_path):
-            continue
+            rel_candidate: str = os.path.join("data/023_EXP_stair/landscapes", os.path.basename(landscape_path))
+            if os.path.exists(rel_candidate):
+                landscape_path = rel_candidate
+            else:
+                continue
         
         sites: int = item["sites"]
         radius: int = item["radius"]

@@ -100,7 +100,7 @@ exemplars = generate_fg_vmd_scripts(
 
 # %% panel b
 
-save_path_b = "/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/plots/figure_6/panel_b"
+save_path_b = "plots/figure_6/panel_b"
 os.makedirs(os.path.dirname(save_path_b), exist_ok=True)
 
 fig_b = plot_fg_spatial_network(
@@ -153,7 +153,7 @@ fig_b = plot_fg_spatial_network(
 
 # %% panel d
 
-save_path_d = "/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/plots/figure_6/panel_d"
+save_path_d = "plots/figure_6/panel_d"
 os.makedirs(os.path.dirname(save_path_d), exist_ok=True)
 
 fig_d = plot_fg_spatial_network(

@@ -16,6 +16,8 @@
 .ipynb_checkpoints
 old_notebooks
 data
+__pycache__
+iMSM.egg-info
 
 # !**/[567]_*/
 # !**/[567]_*/**

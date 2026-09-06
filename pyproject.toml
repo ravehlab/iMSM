@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "iMSM"
+version = "0.1.0"
+description = "Interaction-based Markov State Models for macromolecular dynamics and nucleocytoplasmic transport"
+readme = "README.md"
+authors = [
+    { name = "Roi Eliasian" },
+    { name = "Barak Raveh" }
+]
+requires-python = ">=3.9"
+dependencies = [
+    "numpy",
+    "scipy",
+    "matplotlib",
+    "pandas",
+    "seaborn",
+]
+
+[project.optional-dependencies]
+all = [
+    "mdtraj",
+    "pygam",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["iMSM*"]

@@ -35,7 +35,7 @@ fig = comparison_plot(
     n_sites=[4,6],
     title='Comparison of transport graphs for 10us window size, 160 clusters'
 )
-save_path = "/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/plots/figure_2/panel_a"
+save_path = "plots/figure_2/panel_a"
 os.makedirs(os.path.dirname(save_path), exist_ok=True)
 fig.savefig(save_path + ".png", bbox_inches='tight', dpi=300)
 
@@ -63,7 +63,7 @@ for n_sites in [4, 6]:
         nup_label_fontsize=30,
         nup_label_fontfamily="Roboto Condensed"
     )
-    save_path = f"/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/plots/figure_2/panel_b_{n_sites}"
+    save_path = f"plots/figure_2/panel_b_{n_sites}"
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     fig.savefig(save_path + ".png", bbox_inches='tight', dpi=300)
 
@@ -71,7 +71,7 @@ for n_sites in [4, 6]:
 # %% panel c
 # save_convergence_data()
 fig = plot_4_6_cmp()
-save_path = "/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/plots/figure_2/panel_c"
+save_path = "plots/figure_2/panel_c"
 os.makedirs(os.path.dirname(save_path), exist_ok=True)
 fig.savefig(save_path + ".png", bbox_inches='tight', dpi=300)
 
@@ -81,7 +81,7 @@ fig = plot_initiator_nups(
     base_clustering_path=f"data/ntr_variants/#n#_#r#_more/5_clustering_subsets/1.00fraction_simulations/0index/{320}clusters.pickle",
     normalize_by_mass=False
 )
-save_path = "/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/plots/figure_2/panel_d"
+save_path = "plots/figure_2/panel_d"
 os.makedirs(os.path.dirname(save_path), exist_ok=True)
 fig.savefig(save_path + ".png", bbox_inches='tight', dpi=300)
 
@@ -124,7 +124,7 @@ fig_e = comparison_vertical_plot(
     show_pore_residency=True,
     legend_ncol=2
 )
-save_path_e = "/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/plots/figure_2/panel_e"
+save_path_e = "plots/figure_2/panel_e"
 os.makedirs(os.path.dirname(save_path_e), exist_ok=True)
 fig_e.savefig(save_path_e + ".png", bbox_inches='tight', dpi=300)
 
@@ -156,7 +156,7 @@ fig_f = comparison_vertical_plot(
     show_y_axis=False,
     legend_ncol=1
 )
-save_path_f = "/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/plots/figure_2/panel_f"
+save_path_f = "plots/figure_2/panel_f"
 os.makedirs(os.path.dirname(save_path_f), exist_ok=True)
 fig_f.savefig(save_path_f + ".png", bbox_inches='tight', dpi=300)
 
@@ -188,7 +188,7 @@ fig_g = comparison_vertical_plot(
     show_y_axis=False,
     legend_ncol=1
 )
-save_path_g = "/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/plots/figure_2/panel_g"
+save_path_g = "plots/figure_2/panel_g"
 os.makedirs(os.path.dirname(save_path_g), exist_ok=True)
 fig_g.savefig(save_path_g + ".png", bbox_inches='tight', dpi=300)
 

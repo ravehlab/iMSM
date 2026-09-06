@@ -36,13 +36,13 @@ from figure_stationary_helpers import visualize_stationary_distribution, plot_in
 
 # %% states_over_subset
 fig = plot_states_found_over_subset()
-save_path = "/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/plots/figure_supp/states_over_subset"
+save_path = "plots/figure_supp/states_over_subset"
 os.makedirs(os.path.dirname(save_path), exist_ok=True)
 fig.savefig(save_path + ".png", bbox_inches='tight', dpi=300)
 
 # %% implied_timesales
 fig = plot_implied_timescales()
-save_path = "/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/plots/figure_supp/implied_timescales"
+save_path = "plots/figure_supp/implied_timescales"
 os.makedirs(os.path.dirname(save_path), exist_ok=True)
 fig.savefig(save_path + ".png", bbox_inches='tight', dpi=300)
 
@@ -57,7 +57,7 @@ for flow in ['in', 'out']:
         title=f'{flow} flows of states for r=26A, n=4,6 sites, MSM w/ {n_clusters} clusters',
         in_out_flow=flow
     )
-    save_path = f"/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/plots/figure_supp/in_out_flows_{flow}"
+    save_path = f"plots/figure_supp/in_out_flows_{flow}"
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     fig.savefig(save_path + ".png", bbox_inches='tight', dpi=300)
 
@@ -66,30 +66,30 @@ fig = plot_committor_vs_z(
     z_nuc=-15.0,
     z_cyt=15.0
 )
-save_path = "/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/plots/figure_supp/committor_vs_z"
+save_path = "plots/figure_supp/committor_vs_z"
 os.makedirs(os.path.dirname(save_path), exist_ok=True)
 fig.savefig(save_path + ".png", bbox_inches='tight', dpi=300, facecolor='none')
 
 # %% convergence sim subset
 fig1 = plot_speedup_factor_heatmap(use_sim_subset=True)
-save_path1 = "/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/plots/figure_supp/speedup_factor_sim_subset"
+save_path1 = "plots/figure_supp/speedup_factor_sim_subset"
 os.makedirs(os.path.dirname(save_path1), exist_ok=True)
 fig1.savefig(save_path1 + ".png", bbox_inches='tight', dpi=300)
 
 fig2 = plot_all_convergences(use_sim_subset=True)
-save_path2 = "/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/plots/figure_supp/all_convergences_sim_subset"
+save_path2 = "plots/figure_supp/all_convergences_sim_subset"
 os.makedirs(os.path.dirname(save_path2), exist_ok=True)
 fig2.savefig(save_path2 + ".png", bbox_inches='tight', dpi=300)
 
 # %% 1d free energy landscapes
 fig = plot_all_1d_landscapes()
-save_path = "/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/plots/figure_supp/1d_landscapes"
+save_path = "plots/figure_supp/1d_landscapes"
 os.makedirs(os.path.dirname(save_path), exist_ok=True)
 fig.savefig(save_path + ".png", bbox_inches='tight', dpi=300)
 
 # %% pore diameter permeability comparison
 fig = plot_permeability_pore_diameter_comparison()
-save_path = "/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/plots/figure_supp/pore_diameter_permeability_comparison"
+save_path = "plots/figure_supp/pore_diameter_permeability_comparison"
 os.makedirs(os.path.dirname(save_path), exist_ok=True)
 fig.savefig(save_path + ".png", bbox_inches='tight', dpi=300)
 
@@ -131,7 +131,7 @@ fig_b = comparison_vertical_plot(
     show_arrows=True,
     show_stationary_dist=False
 )
-save_path_b = "/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/plots/figure_supp/single_spoke_diameter_nup_color"
+save_path_b = "plots/figure_supp/single_spoke_diameter_nup_color"
 os.makedirs(os.path.dirname(save_path_b), exist_ok=True)
 fig_b.savefig(save_path_b + ".png", bbox_inches='tight', dpi=300)
 
@@ -156,7 +156,7 @@ fig_eb = visualize_stationary_distribution(
     right_to_left=False,
     center_labels=False
 )
-save_path_eb = "/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/plots/figure_supp/bead_proportion"
+save_path_eb = "plots/figure_supp/bead_proportion"
 os.makedirs(os.path.dirname(save_path_eb), exist_ok=True)
 fig_eb.savefig(save_path_eb + ".png", bbox_inches='tight', dpi=300)
 
@@ -167,13 +167,13 @@ fig_in_mass = plot_initiator_nups(
     base_clustering_path=f"data/ntr_variants/#n#_#r#_more/5_clustering_subsets/1.00fraction_simulations/0index/{n_clusters}clusters.pickle",
     normalize_by_mass=True
 )
-save_path_in_mass = "/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/plots/figure_supp/initiator_nups_mass_normalized"
+save_path_in_mass = "plots/figure_supp/initiator_nups_mass_normalized"
 os.makedirs(os.path.dirname(save_path_in_mass), exist_ok=True)
 fig_in_mass.savefig(save_path_in_mass + ".png", bbox_inches='tight', dpi=300)
 
 # %% chapman kolmogorov test for ntr variants
 fig_ck = plot_chapman_kolmogorov_ntr_variants()
-save_path_ck = "/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/plots/figure_supp/chapman_kolmogorov_ntr_variants"
+save_path_ck = "plots/figure_supp/chapman_kolmogorov_ntr_variants"
 os.makedirs(os.path.dirname(save_path_ck), exist_ok=True)
 fig_ck.savefig(save_path_ck + ".png", bbox_inches='tight', dpi=300)
 

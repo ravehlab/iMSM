@@ -1,5 +1,6 @@
 # %% imports
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -28,7 +29,7 @@ from figure_videos_helpers import (
 
 # %% Block 1: Generate VMD simulation movie script
 
-save_dir_b1: str = "/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/plots/videos"
+save_dir_b1: str = "plots/videos"
 vmd_movie_path_b1: str = os.path.join(save_dir_b1, "vmd_simulation.mp4")
 vmd_script_dir_b1: str = "vmd_states/fgC88_91_com"
 
@@ -72,7 +73,7 @@ print(f"   or in GUI VMD run: render_simulation_movie \"{vmd_movie_path_b1}\"")
 
 # %% Block 2: Generate iMSM network animation video
 
-save_dir_b2: str = "/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/plots/videos"
+save_dir_b2: str = "plots/videos"
 imsm_movie_path_b2: str = os.path.join(save_dir_b2, "imsm_network.mp4")
 top_path_b2: str = "data/nup_sims/fsfgx2/output_from_0_nowat.dms.pdb"
 imsm_checkpoint_path_b2: str = "data/nup_sims/fsfgx2/imsm/fgC88_91_com"
@@ -122,7 +123,7 @@ print(f">> Block 2 Complete: Generated iMSM animation video at:\n   {imsm_video_
 
 # %% Block 3: Combine simulation and iMSM videos side-by-side
 
-save_dir_b3: str = "/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/plots/videos"
+save_dir_b3: str = "plots/videos"
 vmd_movie_path_b3: str = os.path.join(save_dir_b3, "vmd_simulation.mp4")
 imsm_movie_path_b3: str = os.path.join(save_dir_b3, "imsm_network.mp4")
 combined_movie_path_b3: str = os.path.join(save_dir_b3, "figure_6_combined_video.mp4")
@@ -131,7 +132,7 @@ combined_video_result: str = combine_simulation_and_imsm_videos(
     vmd_video_path=vmd_movie_path_b3,
     imsm_video_path=imsm_movie_path_b3,
     output_video_path=combined_movie_path_b3,
-    ffmpeg_path="/usr/bin/ffmpeg",
+    ffmpeg_path=shutil.which("ffmpeg") or "ffmpeg",
     target_height=1080,
     fps=30,
 )
@@ -141,7 +142,7 @@ print(f">> Block 3 Complete: Generated combined synchronized video at:\n   {comb
 
 # %% Block 4: Generate NPC 4-site translocation animation video (Figure 2a)
 
-save_dir_b4: str = "/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/plots/videos"
+save_dir_b4: str = "plots/videos"
 npc_movie_path_b4: str = os.path.join(save_dir_b4, "npc_4sites_imsm_trajectory.mp4")
 
 npc_video_result: str = generate_npc_translocation_video(
@@ -176,7 +177,7 @@ print(f">> Block 4 Complete: Generated NPC 4-site translocation video at:\n   {n
 
 # %% Block 5: Generate NPC 3x3 grid translocation animation video (Figure 3a)
 
-save_dir_b5: str = "/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/plots/videos"
+save_dir_b5: str = "plots/videos"
 npc_grid_movie_path_b5: str = os.path.join(save_dir_b5, "npc_grid_3x3_imsm_trajectory.mp4")
 
 npc_grid_video_result: str = generate_npc_grid_translocation_video(
@@ -216,7 +217,7 @@ print(f">> Block 5 Complete: Generated NPC 3x3 grid translocation video at:\n   
 
 # %% Block 6: Combine simulation and translocation showcase videos with fades
 
-save_dir_b6: str = "/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/plots/videos"
+save_dir_b6: str = "plots/videos"
 npcsim_movie_path_b6: str = os.path.join(save_dir_b6, "npcsim-highres.mov")
 npc_4sites_movie_path_b6: str = os.path.join(save_dir_b6, "npc_4sites_imsm_trajectory.mp4")
 npc_grid_movie_path_b6: str = os.path.join(save_dir_b6, "npc_grid_3x3_imsm_trajectory.mp4")
@@ -241,8 +242,8 @@ combined_showcase_result: str = combine_videos_with_fades(
     target_height=1080,
     fps=30,
     pad_colors=["black", "white", "white"],
-    ffmpeg_path="/usr/bin/ffmpeg",
-    ffprobe_path="/usr/bin/ffprobe",
+    ffmpeg_path=shutil.which("ffmpeg") or "ffmpeg",
+    ffprobe_path=shutil.which("ffprobe") or "ffprobe",
     crf=18,
     overlay_texts=overlay_texts_b6,
     text_font="DejaVu Sans",

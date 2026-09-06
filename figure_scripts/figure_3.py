@@ -46,18 +46,18 @@ fig = comparison_plot(
     nucleus_cytoplasm_top_row_only=True,
     nucleus_cytoplasm_fontsize=54
 )
-save_path = "/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/plots/figure_3/panel_a"
+save_path = "plots/figure_3/panel_a"
 os.makedirs(os.path.dirname(save_path), exist_ok=True)
 fig.savefig(save_path + ".png", bbox_inches='tight', dpi=300)
 
 # %% panel b
 fig = plot_full_permeability_comparison()
-save_path = "/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/plots/figure_3/panel_b"
+save_path = "plots/figure_3/panel_b"
 os.makedirs(os.path.dirname(save_path), exist_ok=True)
 fig.savefig(save_path + ".png", bbox_inches='tight', dpi=300)
 
 fig = plot_full_permeability_comparison_alt()
-save_path = "/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/plots/figure_3/panel_b_alt"
+save_path = "plots/figure_3/panel_b_alt"
 os.makedirs(os.path.dirname(save_path), exist_ok=True)
 fig.savefig(save_path + ".png", bbox_inches='tight', dpi=300)
 
@@ -78,13 +78,13 @@ fig, _ = plot_free_energy_grid(
     title='Free Energy Distributions Across Nup Layers, 56 nm diameter'
 )
 
-save_path = "/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/plots/figure_3/panel_c"
+save_path = "plots/figure_3/panel_c"
 os.makedirs(os.path.dirname(save_path), exist_ok=True)
 fig.savefig(save_path + ".png", bbox_inches='tight', dpi=300)
 
 # %% panel d
 fig_js, fig_wd = plot_js_wd()
-save_path = "/cs/usr/roi.eliasian/LabFolder/Master/NPC-markov/plots/figure_3/panel_d"
+save_path = "plots/figure_3/panel_d"
 os.makedirs(os.path.dirname(save_path), exist_ok=True)
 fig_js.savefig(save_path + "_js.png", bbox_inches='tight', dpi=300)
 fig_wd.savefig(save_path + "_wd.png", bbox_inches='tight', dpi=300)
