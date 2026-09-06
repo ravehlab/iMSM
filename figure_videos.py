@@ -39,6 +39,7 @@ vmd_script_path: str = generate_vmd_movie_script(
     stride=10,
     fps=30,
     ns_per_frame=0.96,
+    smoothing_window_ns=50.0,
     auto_align_plane=True,
     rotation_x_deg=0.0,
     rotation_y_deg=0.0,
@@ -209,6 +210,12 @@ npc_4sites_movie_path_b6: str = os.path.join(save_dir_b6, "npc_4sites_imsm_traje
 npc_grid_movie_path_b6: str = os.path.join(save_dir_b6, "npc_grid_3x3_imsm_trajectory.mp4")
 combined_showcase_movie_path_b6: str = os.path.join(save_dir_b6, "npc_showcase_combined_fades.mp4")
 
+overlay_texts_b6: list[str] = [
+    "Input: Brownian dynamics\ntrajectories from integrative model\nof nucleocytoplasmic transport\n(Raveh, Eliasian et al., PNAS 2025)",
+    "Output: interaction-based Markov\nstate model of nucleocytoplasmic\ntransport",
+    "",
+]
+
 combined_showcase_result: str = combine_videos_with_fades(
     video_paths=[
         npcsim_movie_path_b6,
@@ -225,6 +232,15 @@ combined_showcase_result: str = combine_videos_with_fades(
     ffmpeg_path="/usr/bin/ffmpeg",
     ffprobe_path="/usr/bin/ffprobe",
     crf=18,
+    overlay_texts=overlay_texts_b6,
+    text_font="DejaVu Sans",
+    text_fontsize=28,
+    text_font_colors=["white", "black", "black"],
+    text_border_colors=["black", "white", "white"],
+    text_border_width=3,
+    text_x="30",
+    text_y="(h-text_h)/2",
+    text_line_spacing=12,
 )
 
 print(f">> Block 6 Complete: Generated combined showcase video at:\n   {combined_showcase_result}")

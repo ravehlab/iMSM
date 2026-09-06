@@ -1922,3 +1922,226 @@ def generate_fg_vmd_scripts(
         vmd_zoom_scale=vmd_zoom_scale,
         all_states_translate=all_states_translate,
     )
+
+
+def hex_to_rgb_float(hex_code: str) -> tuple[float, float, float]:
+    """Convert hex color string to normalized RGB float tuple in range [0.0, 1.0]."""
+    clean_hex: str = hex_code.lstrip("#")
+    r_int: int = int(clean_hex[0:2], 16)
+    g_int: int = int(clean_hex[2:4], 16)
+    b_int: int = int(clean_hex[4:6], 16)
+    return float(r_int / 255.0), float(g_int / 255.0), float(b_int / 255.0)
+
+
+def generate_fg_overview_vmd_script(
+    top_path: str,
+    traj_paths: list[str],
+    output_dir: str,
+    output_filename: str,
+    kap_n_ca: int,
+    focal_fg_alphacarbon: int | tuple[int, int] | list[int] | str,
+    frame_idx: int | None,
+    auto_align_plane: bool,
+    rotation_x_deg: float,
+    rotation_y_deg: float,
+    rotation_z_deg: float,
+    heat5_range: tuple[int, int],
+    heat6_range: tuple[int, int],
+    vmd_zoom_scale: float,
+    kap_color_hex: str,
+    fsfg_color_hex: str,
+) -> str:
+    """Generate a self-contained, portable VMD script showing the full Kap95 at the simulation midpoint."""
+    pdb: md.Trajectory = md.load(top_path)
+    all_ca: np.ndarray = pdb.topology.select("name CA")
+    kap_ca: np.ndarray = all_ca[:kap_n_ca]
+    fg1_ca: np.ndarray = all_ca[kap_n_ca : kap_n_ca + 125]
+
+    focal_indices, focal_label = extract_focal_info(focal_fg_alphacarbon=focal_fg_alphacarbon)
+    focal_ca_indices: list[int] = [int(fg1_ca[idx]) for idx in focal_indices]
+    focal_atoms = [pdb.topology.atom(idx) for idx in focal_ca_indices]
+    focal_res_seqs: list[int] = [int(atom.residue.resSeq) for atom in focal_atoms]
+    focal_res_sel_str: str = " or ".join([f"resid {s}" for s in sorted(set(focal_res_seqs))])
+    focal_names_str: str = "+".join([f"{atom.residue.name}{atom.residue.resSeq}" for atom in focal_atoms])
+
+    kap_xyz_angstrom: np.ndarray = pdb.xyz[0, kap_ca, :] * 10.0
+
+    effective_rot_x: float = rotation_x_deg
+    effective_rot_y: float = rotation_y_deg
+    effective_rot_z: float = rotation_z_deg
+
+    if auto_align_plane:
+        _, effective_rot_x, effective_rot_y, effective_rot_z = (
+            compute_heat_repeats_alignment_matrix(
+                kap_xyz=kap_xyz_angstrom / 10.0,
+                heat5_range=heat5_range,
+                heat6_range=heat6_range,
+            )
+        )
+
+    kap_r, kap_g, kap_b = hex_to_rgb_float(hex_code=kap_color_hex)
+    fsfg_r, fsfg_g, fsfg_b = hex_to_rgb_float(hex_code=fsfg_color_hex)
+
+    os.makedirs(output_dir, exist_ok=True)
+    out_script_path: str = os.path.join(output_dir, output_filename)
+
+    fg1_min_res: int = kap_n_ca + 1
+    fg1_max_res: int = kap_n_ca + 125
+
+    frame_init_line: str = (
+        f"set target_frame {frame_idx}"
+        if frame_idx is not None
+        else (
+            "if {![info exists target_frame]} {\n"
+            "    set num_f [molinfo top get numframes]\n"
+            "    if {$num_f > 1} {\n"
+            "        set target_frame [expr {$num_f / 2}]\n"
+            "    } else {\n"
+            "        set target_frame 0\n"
+            "    }\n"
+            "}"
+        )
+    )
+
+    tcl_lines: list[str] = [
+        "# ==============================================================================",
+        "# Standalone VMD Script: Full Kap95 Simulation Overview (Panel Extra)",
+        f"# Focal Component: {focal_label} ({focal_names_str})",
+        f"# Kap95 Color: {kap_color_hex} | FSFG Color: {fsfg_color_hex}",
+        "# ==============================================================================",
+        "",
+        "# Determine target frame (midpoint of trajectory unless pre-defined)",
+        frame_init_line,
+        "",
+        "proc setup_full_kap_overview_representations {} {",
+        "    # Remove existing representations",
+        "    set nreps [molinfo top get numreps]",
+        "    for {set i [expr {$nreps - 1}]} {$i >= 0} {incr i -1} {",
+        "        mol delrep $i top",
+        "    }",
+        "",
+        "    # Custom color palette",
+        f"    color change rgb 30 {kap_r:.4f} {kap_g:.4f} {kap_b:.4f}   ;# Kap95: {kap_color_hex}",
+        f"    color change rgb 31 {fsfg_r:.4f} {fsfg_g:.4f} {fsfg_b:.4f}   ;# FSFG: {fsfg_color_hex}",
+        "    color change rgb 32 0.750 0.750 0.750                  ;# FG Chain 1 non-focal: Light Gray",
+        "",
+        "    # 1. Whole Kap95 - Softly shaded (AOChalky) NewCartoon",
+        "    mol representation NewCartoon 0.35 10.0 4.1 0",
+        "    mol color ColorID 30",
+        f'    mol selection "protein and resid 1 to {kap_n_ca}"',
+        "    mol material AOChalky",
+        "    mol addrep top",
+        "",
+        f"    # 2. Focal FSFG 4 AAs ({focal_names_str}) Backbone - Softly shaded Tube",
+        "    mol representation Tube 0.35 16.0",
+        "    mol color ColorID 31",
+        f'    mol selection "({focal_res_sel_str})"',
+        "    mol material AOChalky",
+        "    mol addrep top",
+        "",
+        f"    # 3. Focal FSFG 4 AAs ({focal_names_str}) Sidechains - Softly shaded Licorice",
+        "    mol representation Licorice 0.28 12.0 12.0",
+        "    mol color ColorID 31",
+        f'    mol selection "({focal_res_sel_str}) and not hydrogen and (sidechain or name CA)"',
+        "    mol material AOChalky",
+        "    mol addrep top",
+        "",
+        "    # 4. Non-focal FG Chain 1 - Solid Full-Color Tube",
+        "    mol representation Tube 0.22 16.0",
+        "    mol color ColorID 31",
+        f'    mol selection "resid {fg1_min_res} to {fg1_max_res} and not ({focal_res_sel_str})"',
+        "    mol material AOChalky",
+        "    mol addrep top",
+        "",
+        "    # Display settings matching publication style",
+        "    display projection Orthographic",
+        "    display depthcue off",
+        "    display backgroundgradient off",
+        "    display culling on",
+        "    display rendermode GLSL",
+        "    color Display Background white",
+        "    axes location off",
+        "}",
+        "",
+        "proc align_and_center_view {f_idx rot_x rot_y rot_z zoom_scale} {",
+        f'    set sel_kap [atomselect top "protein and resid 1 to {kap_n_ca}" frame $f_idx]',
+        "    set kap_center [measure center $sel_kap]",
+        "    $sel_kap delete",
+        "    set shift [vecscale -1.0 $kap_center]",
+        '    set move_all [atomselect top "all" frame $f_idx]',
+        "    $move_all moveby $shift",
+        "    $move_all delete",
+        "",
+        "    display resetview",
+        "    translate to 0.0 0.0 0.0",
+        "    molinfo top set center [list {0.0 0.0 0.0}]",
+        "    rotate y by $rot_y",
+        "    rotate x by $rot_x",
+        "    rotate z by $rot_z",
+        "    scale by $zoom_scale",
+        "}",
+        "",
+        "proc view_overview {{f_idx \"\"}} {",
+        "    if {$f_idx eq \"\"} {",
+        "        set f_idx $::target_frame",
+        "    }",
+        "    animate goto $f_idx",
+        "    setup_full_kap_overview_representations",
+        f"    align_and_center_view $f_idx {effective_rot_x:.1f} {effective_rot_y:.1f} {effective_rot_z:.1f} {vmd_zoom_scale:.2f}",
+        "    display update",
+        '    puts ">> Viewing Full Kap95 Simulation Overview (Frame $f_idx)"',
+        "}",
+        "",
+        "proc render_overview_png {filename} {",
+        "    set base_no_ext [file rootname $filename]",
+        "    set tmp_tga \"${base_no_ext}.tmp.tga\"",
+        "    render snapshot $tmp_tga",
+        "    display update",
+        "",
+        "    # Convert raw TGA framebuffer capture to true RFC-standard PNG using Python PIL",
+        "    set py_script \"from PIL import Image; im = Image.open(r'$tmp_tga'); im.save(r'$filename', format='PNG')\"",
+        "    set converted 0",
+        "    if {[catch {exec conda run -n general_notebooks python -c $py_script} py_err1] == 0} {",
+        "        set converted 1",
+        "    } elseif {[catch {exec conda run -n general python3 -c $py_script} py_err2] == 0} {",
+        "        set converted 1",
+        "    } elseif {[catch {exec python3 -c $py_script} py_err3] == 0} {",
+        "        set converted 1",
+        "    } elseif {[catch {exec python -c $py_script} py_err4] == 0} {",
+        "        set converted 1",
+        "    } elseif {[catch {exec convert $tmp_tga $filename} conv_err] == 0} {",
+        "        set converted 1",
+        "    }",
+        "",
+        "    if {$converted} {",
+        "        file delete -force $tmp_tga",
+        '        puts ">> Rendered and converted: $filename"',
+        "    } else {",
+        "        file rename -force $tmp_tga \"${base_no_ext}.tga\"",
+        '        puts ">> Notice: Saved raw snapshot as ${base_no_ext}.tga"',
+        "    }",
+        "}",
+        "",
+        "# Initialize overview view",
+        "view_overview",
+        "",
+        "# Save snapshot in relative snapshots folder",
+        "set script_dir [file dirname [file normalize [info script]]]",
+        'set snapshot_dir [file join $script_dir "snapshots"]',
+        "file mkdir $snapshot_dir",
+        'set snapshot_file [file join $snapshot_dir "full_kap_overview.png"]',
+        "render_overview_png $snapshot_file",
+        "",
+        'puts "================================================================="',
+        'puts "Full Kap95 Simulation Overview Loaded!"',
+        'puts "  - Use: view_overview <frame_idx>   (Re-orient / jump to frame)"',
+        'puts "  - Use: render_overview_png <path>  (Save PNG snapshot)"',
+        'puts "================================================================="',
+    ]
+
+    with open(out_script_path, "w") as f_out:
+        f_out.write("\n".join(tcl_lines) + "\n")
+
+    print(f">> Generated Full Kap95 VMD Overview Script: {out_script_path}")
+    return out_script_path
+

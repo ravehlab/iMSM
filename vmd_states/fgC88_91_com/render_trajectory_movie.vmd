@@ -7,6 +7,9 @@ set output_movie "vmd_simulation.mp4"
 set frame_stride 10
 set video_fps 30
 set window_size 500
+set ns_per_frame 0.96
+set smoothing_window_ns 50.0
+set smoothing_frames 26
 set target_width 1920
 set target_height 1080
 
@@ -1161,6 +1164,10 @@ proc setup_video_representations {} {
 
     apply_custom_colorscale
 
+    if {$::smoothing_frames > 0} {
+        apply_smoothing $::smoothing_frames
+    }
+
     # Camera projection matching 2D network plot
     display projection Orthographic
     display depthcue off
@@ -1175,6 +1182,18 @@ proc setup_video_representations {} {
     rotate z by -25.8
     scale by 8.00
     translate by -0.30 0.30 0.00
+}
+
+proc apply_smoothing {{n -1}} {
+    if {$n < 0} { set n $::smoothing_frames }
+    if {$n < 0} { set n 0 }
+    set num_reps [molinfo top get numreps]
+    for {set r 0} {$r < $num_reps} {incr r} {
+        mol smoothrep top $r $n
+    }
+    set total_frames [expr {2 * $n + 1}]
+    set total_ns [expr {$total_frames * $::ns_per_frame}]
+    puts [format ">> Applied trajectory smoothing: %d frames (+/- %.1f ns, total moving average window: %.1f ns over %d frames)" $n [expr {$n * $::ns_per_frame}] $total_ns $total_frames]
 }
 
 proc render_simulation_movie {{out_mp4 ""} {step_stride -1} {fps -1}} {
@@ -1235,6 +1254,10 @@ proc init_and_prepare {} {
     setup_video_representations
     puts "================================================================="
     puts "VMD Trajectory Video Environment Ready!"
+    if {$::smoothing_frames > 0} {
+        puts [format ">> Trajectory smoothing active: %d frames (+/- %.1f ns, ~%.1f ns moving average window)" $::smoothing_frames [expr {$::smoothing_frames * $::ns_per_frame}] [expr {(2 * $::smoothing_frames + 1) * $::ns_per_frame}]]
+        puts "   (You can adjust smoothing at any time by running: apply_smoothing <n_frames>)"
+    }
     puts "Run: render_simulation_movie to generate the video."
     puts "================================================================="
 }

@@ -216,15 +216,19 @@ def generate_vmd_movie_script(
     all_states_translate: tuple[float, float, float],
     width: int,
     height: int,
+    smoothing_window_ns: float,
 ) -> str:
     """Generate VMD Tcl script to render a synchronized 3D trajectory video matching Figure 6."""
     os.makedirs(output_dir, exist_ok=True)
-    abs_top_path: str = os.path.abspath(top_path)
-    abs_traj_paths: list[str] = [os.path.abspath(p) for p in traj_paths]
-    abs_output_movie_path: str = os.path.abspath(output_movie_path)
-    os.makedirs(os.path.dirname(abs_output_movie_path), exist_ok=True)
+    os.makedirs(os.path.dirname(os.path.abspath(output_movie_path)), exist_ok=True)
 
-    pdb: md.Trajectory = md.load(abs_top_path)
+    smoothing_frames: int = (
+        max(0, int(round((smoothing_window_ns / ns_per_frame) / 2.0)))
+        if smoothing_window_ns > 0.0
+        else 0
+    )
+
+    pdb: md.Trajectory = md.load(top_path)
     all_ca: np.ndarray = pdb.topology.select("name CA")
     kap_ca: np.ndarray = all_ca[:kap_n_ca]
     fg1_ca: np.ndarray = all_ca[kap_n_ca : kap_n_ca + 125]
@@ -290,10 +294,13 @@ def generate_vmd_movie_script(
         f"# Focal Component: {focal_label} ({focal_names_str})",
         "# ==============================================================================",
         "",
-        f"set output_movie \"vmd_simulation.mp4\"",
+        f'set output_movie "{os.path.basename(output_movie_path)}"',
         f"set frame_stride {stride}",
         f"set video_fps {fps}",
         f"set window_size {window_size}",
+        f"set ns_per_frame {ns_per_frame}",
+        f"set smoothing_window_ns {smoothing_window_ns}",
+        f"set smoothing_frames {smoothing_frames}",
         f"set target_width {width}",
         f"set target_height {height}",
         "",
@@ -429,6 +436,10 @@ def generate_vmd_movie_script(
             "",
             "    apply_custom_colorscale",
             "",
+            "    if {$::smoothing_frames > 0} {",
+            "        apply_smoothing $::smoothing_frames",
+            "    }",
+            "",
             "    # Camera projection matching 2D network plot",
             "    display projection Orthographic",
             "    display depthcue off",
@@ -443,6 +454,18 @@ def generate_vmd_movie_script(
             f"    rotate z by {effective_rot_z:.1f}",
             f"    scale by {vmd_zoom_scale:.2f}",
             f"    translate by {all_states_translate[0]:.2f} {all_states_translate[1]:.2f} {all_states_translate[2]:.2f}",
+            "}",
+            "",
+            "proc apply_smoothing {{n -1}} {",
+            "    if {$n < 0} { set n $::smoothing_frames }",
+            "    if {$n < 0} { set n 0 }",
+            "    set num_reps [molinfo top get numreps]",
+            "    for {set r 0} {$r < $num_reps} {incr r} {",
+            "        mol smoothrep top $r $n",
+            "    }",
+            "    set total_frames [expr {2 * $n + 1}]",
+            "    set total_ns [expr {$total_frames * $::ns_per_frame}]",
+            "    puts [format \">> Applied trajectory smoothing: %d frames (+/- %.1f ns, total moving average window: %.1f ns over %d frames)\" $n [expr {$n * $::ns_per_frame}] $total_ns $total_frames]",
             "}",
             "",
             "proc render_simulation_movie {{out_mp4 \"\"} {step_stride -1} {fps -1}} {",
@@ -503,6 +526,10 @@ def generate_vmd_movie_script(
             "    setup_video_representations",
             '    puts "================================================================="',
             '    puts "VMD Trajectory Video Environment Ready!"',
+            "    if {$::smoothing_frames > 0} {",
+            "        puts [format \">> Trajectory smoothing active: %d frames (+/- %.1f ns, ~%.1f ns moving average window)\" $::smoothing_frames [expr {$::smoothing_frames * $::ns_per_frame}] [expr {(2 * $::smoothing_frames + 1) * $::ns_per_frame}]]",
+            "        puts \"   (You can adjust smoothing at any time by running: apply_smoothing <n_frames>)\"",
+            "    }",
             '    puts "Run: render_simulation_movie to generate the video."',
             '    puts "================================================================="',
             "}",
@@ -1171,8 +1198,17 @@ def combine_videos_with_fades(
     ffmpeg_path: str,
     ffprobe_path: str,
     crf: int,
+    overlay_texts: list[str],
+    text_font: str,
+    text_fontsize: int,
+    text_font_colors: list[str],
+    text_border_colors: list[str],
+    text_border_width: int,
+    text_x: str,
+    text_y: str,
+    text_line_spacing: int,
 ) -> str:
-    """Combine multiple videos into a single video with fade transitions using ffmpeg."""
+    """Combine multiple videos into a single video with fade transitions and text overlays using ffmpeg."""
     n_videos: int = len(video_paths)
     if n_videos < 2:
         raise ValueError(f"At least two videos are required to combine with fades, got {n_videos}.")
@@ -1183,6 +1219,18 @@ def combine_videos_with_fades(
     if len(pad_colors) != n_videos:
         raise ValueError(
             f"Expected {n_videos} pad colors for {n_videos} videos, got {len(pad_colors)}."
+        )
+    if len(overlay_texts) != n_videos:
+        raise ValueError(
+            f"Expected {n_videos} overlay texts for {n_videos} videos, got {len(overlay_texts)}."
+        )
+    if len(text_font_colors) != n_videos:
+        raise ValueError(
+            f"Expected {n_videos} text font colors for {n_videos} videos, got {len(text_font_colors)}."
+        )
+    if len(text_border_colors) != n_videos:
+        raise ValueError(
+            f"Expected {n_videos} text border colors for {n_videos} videos, got {len(text_border_colors)}."
         )
     for path in video_paths:
         if not os.path.exists(path):
@@ -1203,12 +1251,36 @@ def combine_videos_with_fades(
 
     os.makedirs(os.path.dirname(os.path.abspath(output_video_path)), exist_ok=True)
 
+    text_files: list[str] = []
+    for i, text in enumerate(overlay_texts):
+        if text.strip():
+            tf_path: str = os.path.join(
+                os.path.dirname(os.path.abspath(output_video_path)),
+                f".overlay_text_{i}.txt",
+            )
+            with open(tf_path, "w", encoding="utf-8") as f:
+                f.write(text)
+            text_files.append(tf_path)
+        else:
+            text_files.append("")
+
     filter_parts: list[str] = []
     for i in range(n_videos):
-        filter_parts.append(
+        base_filter: str = (
             f"[{i}:v]fps={fps},scale={target_width}:{target_height}:force_original_aspect_ratio=decrease:flags=lanczos,"
-            f"pad={target_width}:{target_height}:(ow-iw)/2:(oh-ih)/2:color={pad_colors[i]},setsar=1,format=yuv420p[v{i}]"
+            f"pad={target_width}:{target_height}:(ow-iw)/2:(oh-ih)/2:color={pad_colors[i]},setsar=1,format=yuv420p"
         )
+        if text_files[i]:
+            escaped_tf: str = text_files[i].replace(":", "\\:")
+            escaped_x: str = text_x.replace(",", "\\,")
+            escaped_y: str = text_y.replace(",", "\\,")
+            base_filter = (
+                f"{base_filter},drawtext=textfile='{escaped_tf}':font='{text_font}':"
+                f"fontsize={text_fontsize}:fontcolor={text_font_colors[i]}:"
+                f"bordercolor={text_border_colors[i]}:borderw={text_border_width}:"
+                f"x={escaped_x}:y={escaped_y}:line_spacing={text_line_spacing}"
+            )
+        filter_parts.append(f"{base_filter}[v{i}]")
 
     current_acc_duration: float = durations[0]
     prev_stream: str = "v0"
@@ -1266,18 +1338,19 @@ def combine_videos_with_fades(
     _, stderr_text = proc.communicate()
     print()
 
+    for tf in text_files:
+        if tf and os.path.exists(tf):
+            try:
+                os.remove(tf)
+            except OSError:
+                pass
+
     if proc.returncode != 0:
-        if os.path.exists(output_video_path) and os.path.getsize(output_video_path) > 1000:
-            print(f">> Notice: ffmpeg exited with non-zero code {proc.returncode}, but output video was created successfully at: {output_video_path}")
-            if stderr_text:
-                last_lines: list[str] = [l for l in stderr_text.strip().splitlines() if l][-2:]
-                print(f"   ffmpeg info: {' | '.join(last_lines)}")
-        else:
-            raise RuntimeError(
-                f"ffmpeg failed with exit code {proc.returncode}.\n"
-                f"Command: {' '.join(cmd)}\n"
-                f"Stderr: {stderr_text}"
-            )
+        raise RuntimeError(
+            f"ffmpeg failed with exit code {proc.returncode}.\n"
+            f"Command: {' '.join(cmd)}\n"
+            f"Stderr: {stderr_text}"
+        )
 
     print(f">> Successfully combined videos into: {output_video_path}")
     return output_video_path

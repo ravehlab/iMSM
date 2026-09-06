@@ -1,0 +1,140 @@
+# ==============================================================================
+# Standalone VMD Script: Full Kap95 Simulation Overview (Panel Extra)
+# Focal Component: fgC88_91_com (SER950+PHE951+GLY952+ALA953)
+# Kap95 Color: #d25a59 | FSFG Color: #149C26
+# ==============================================================================
+
+# Determine target frame (midpoint of trajectory unless pre-defined)
+if {![info exists target_frame]} {
+    set num_f [molinfo top get numframes]
+    if {$num_f > 1} {
+        set target_frame [expr {$num_f / 2}]
+    } else {
+        set target_frame 0
+    }
+}
+
+proc setup_full_kap_overview_representations {} {
+    # Remove existing representations
+    set nreps [molinfo top get numreps]
+    for {set i [expr {$nreps - 1}]} {$i >= 0} {incr i -1} {
+        mol delrep $i top
+    }
+
+    # Custom color palette
+    color change rgb 30 0.8235 0.3529 0.3490   ;# Kap95: #d25a59
+    color change rgb 31 0.0784 0.6118 0.1490   ;# FSFG: #149C26
+    color change rgb 32 0.750 0.750 0.750                  ;# FG Chain 1 non-focal: Light Gray
+
+    # 1. Whole Kap95 - Softly shaded (AOChalky) NewCartoon
+    mol representation NewCartoon 0.35 10.0 4.1 0
+    mol color ColorID 30
+    mol selection "protein and resid 1 to 861"
+    mol material AOChalky
+    mol addrep top
+
+    # 2. Focal FSFG 4 AAs (SER950+PHE951+GLY952+ALA953) Backbone - Softly shaded Tube
+    mol representation Tube 0.35 16.0
+    mol color ColorID 31
+    mol selection "(resid 950 or resid 951 or resid 952 or resid 953)"
+    mol material AOChalky
+    mol addrep top
+
+    # 3. Focal FSFG 4 AAs (SER950+PHE951+GLY952+ALA953) Sidechains - Softly shaded Licorice
+    mol representation Licorice 0.28 12.0 12.0
+    mol color ColorID 31
+    mol selection "(resid 950 or resid 951 or resid 952 or resid 953) and not hydrogen and (sidechain or name CA)"
+    mol material AOChalky
+    mol addrep top
+
+    # 4. Non-focal FG Chain 1 - Solid Full-Color Tube
+    mol representation Tube 0.22 16.0
+    mol color ColorID 31
+    mol selection "resid 862 to 986 and not (resid 950 or resid 951 or resid 952 or resid 953)"
+    mol material AOChalky
+    mol addrep top
+
+    # Display settings matching publication style
+    display projection Orthographic
+    display depthcue off
+    display backgroundgradient off
+    display culling on
+    display rendermode GLSL
+    color Display Background white
+    axes location off
+}
+
+proc align_and_center_view {f_idx rot_x rot_y rot_z zoom_scale} {
+    set sel_kap [atomselect top "protein and resid 1 to 861" frame $f_idx]
+    set kap_center [measure center $sel_kap]
+    $sel_kap delete
+    set shift [vecscale -1.0 $kap_center]
+    set move_all [atomselect top "all" frame $f_idx]
+    $move_all moveby $shift
+    $move_all delete
+
+    display resetview
+    translate to 0.0 0.0 0.0
+    molinfo top set center [list {0.0 0.0 0.0}]
+    rotate y by $rot_y
+    rotate x by $rot_x
+    rotate z by $rot_z
+    scale by $zoom_scale
+}
+
+proc view_overview {{f_idx ""}} {
+    if {$f_idx eq ""} {
+        set f_idx $::target_frame
+    }
+    animate goto $f_idx
+    setup_full_kap_overview_representations
+    align_and_center_view $f_idx -44.2 -56.1 -25.8 1.10
+    display update
+    puts ">> Viewing Full Kap95 Simulation Overview (Frame $f_idx)"
+}
+
+proc render_overview_png {filename} {
+    set base_no_ext [file rootname $filename]
+    set tmp_tga "${base_no_ext}.tmp.tga"
+    render snapshot $tmp_tga
+    display update
+
+    # Convert raw TGA framebuffer capture to true RFC-standard PNG using Python PIL
+    set py_script "from PIL import Image; im = Image.open(r'$tmp_tga'); im.save(r'$filename', format='PNG')"
+    set converted 0
+    if {[catch {exec conda run -n general_notebooks python -c $py_script} py_err1] == 0} {
+        set converted 1
+    } elseif {[catch {exec conda run -n general python3 -c $py_script} py_err2] == 0} {
+        set converted 1
+    } elseif {[catch {exec python3 -c $py_script} py_err3] == 0} {
+        set converted 1
+    } elseif {[catch {exec python -c $py_script} py_err4] == 0} {
+        set converted 1
+    } elseif {[catch {exec convert $tmp_tga $filename} conv_err] == 0} {
+        set converted 1
+    }
+
+    if {$converted} {
+        file delete -force $tmp_tga
+        puts ">> Rendered and converted: $filename"
+    } else {
+        file rename -force $tmp_tga "${base_no_ext}.tga"
+        puts ">> Notice: Saved raw snapshot as ${base_no_ext}.tga"
+    }
+}
+
+# Initialize overview view
+view_overview
+
+# Save snapshot in relative snapshots folder
+set script_dir [file dirname [file normalize [info script]]]
+set snapshot_dir [file join $script_dir "snapshots"]
+file mkdir $snapshot_dir
+set snapshot_file [file join $snapshot_dir "full_kap_overview.png"]
+render_overview_png $snapshot_file
+
+puts "================================================================="
+puts "Full Kap95 Simulation Overview Loaded!"
+puts "  - Use: view_overview <frame_idx>   (Re-orient / jump to frame)"
+puts "  - Use: render_overview_png <path>  (Save PNG snapshot)"
+puts "================================================================="

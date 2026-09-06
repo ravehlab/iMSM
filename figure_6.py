@@ -9,6 +9,7 @@ from figure_fg_sliding_helpers import (
     setup_fg_sliding_params,
     run_fg_sliding_imsm,
     generate_fg_vmd_scripts,
+    generate_fg_overview_vmd_script,
     plot_fg_spatial_network,
 )
 
@@ -176,4 +177,33 @@ fig_d = plot_fg_spatial_network(
     show_residue_colorbar=False,
     diverging_palette=(),
     residue_color_range=(1, 21),
+)
+
+
+# %% panel extra
+
+overview_script = generate_fg_overview_vmd_script(
+    top_path="data/nup_sims/fsfgx2/output_from_0_nowat.dms.pdb",
+    traj_paths=[
+        "data/nup_sims/fsfgx2/output_from_0_to_2499_nowat_unwarped.dcd",
+        "data/nup_sims/fsfgx2/output_from_2500_to_4999_nowat_unwarped.dcd",
+        "data/nup_sims/fsfgx2/output_from_5000_to_7499_nowat_unwarped.dcd",
+        "data/nup_sims/fsfgx2/output_from_7500_to_9999_nowat_unwarped.dcd",
+        "data/nup_sims/fsfgx2/output_from_10000_to_12499_nowat_unwarped.dcd",
+        "data/nup_sims/fsfgx2/output_from_12500_nowat_unwarped.dcd",
+    ],
+    output_dir="vmd_states/fgC88_91_com",
+    output_filename="full_kap_overview.vmd",
+    kap_n_ca=861,
+    focal_fg_alphacarbon=(88, 91),
+    frame_idx=None,
+    auto_align_plane=True,
+    rotation_x_deg=0.0,
+    rotation_y_deg=0.0,
+    rotation_z_deg=0.0,
+    heat5_range=(175, 195),
+    heat6_range=(218, 232),
+    vmd_zoom_scale=1.1,
+    kap_color_hex="#d25a59",
+    fsfg_color_hex="#149C26",
 )
