@@ -1,3 +1,16 @@
+import os
+import sys
+from pathlib import Path
+
+_fig_dir: Path = Path(__file__).resolve().parent if "__file__" in globals() else Path.cwd()
+_repo_root: Path = _fig_dir.parent if _fig_dir.name == "figure_scripts" else _fig_dir
+for _p in [str(_fig_dir), str(_repo_root)]:
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
+if not os.path.exists("data") and (_repo_root / "data").exists():
+    os.chdir(_repo_root)
+
 import numpy as np
 import pickle
 import importlib
@@ -6,9 +19,9 @@ from scipy.spatial.distance import jensenshannon
 import matplotlib.pyplot as plt
 import seaborn as sns
 # --
-import utils
-importlib.reload(utils)
-from utils import get_sorted_anchor_coordinates_np, get_sorted_anchor_coordinates, infinitesimal_generator, stationary_distribution, radius_a_to_kda
+import iMSM.extensions.npc.npc_utils
+importlib.reload(iMSM.extensions.npc.npc_utils)
+from iMSM.extensions.npc.npc_utils import get_sorted_anchor_coordinates_np, get_sorted_anchor_coordinates, infinitesimal_generator, stationary_distribution, radius_a_to_kda
 # --
 import iMSM.extensions.npc.npc_graph_figure
 importlib.reload(iMSM.extensions.npc.npc_graph_figure)

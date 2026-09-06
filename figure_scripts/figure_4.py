@@ -1,6 +1,18 @@
 # %% imports
 import os
-import importlib   
+import sys
+from pathlib import Path
+
+_fig_dir: Path = Path(__file__).resolve().parent if "__file__" in globals() else Path.cwd()
+_repo_root: Path = _fig_dir.parent if _fig_dir.name == "figure_scripts" else _fig_dir
+for _p in [str(_fig_dir), str(_repo_root)]:
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
+if not os.path.exists("data") and (_repo_root / "data").exists():
+    os.chdir(_repo_root)
+
+import importlib
 
 import figure_permeability_helpers
 importlib.reload(figure_permeability_helpers)
