@@ -9,6 +9,8 @@
 *.dcd
 *.dms
 *.pdb
+*.mp4
+*.mov
 .vscode
 data/chignolin
 
