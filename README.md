@@ -9,6 +9,33 @@ This repository accompanies the manuscript:
 
 ---
 
+## General Applicability & Method Overview
+
+iMSMs automate the identification of recurring interaction states and the estimation of their transition networks within a user-specified physical representation.
+
+### When Can iMSM Be Applied?
+The approach is generally applicable to **generic molecular dynamics (MD) or Brownian dynamics (BD) simulations** whenever:
+- The dynamics of interest can be represented by **recurring local interaction environments** around a chosen **focal entity** $f$.
+- The transitions between these interaction environments are **approximately Markovian** at an appropriate lag time $\tau$.
+
+By discretizing time-averaged interaction distributions, iMSMs coarse-grain over microscopic contact configurations that need not share the same local Cartesian geometry, provided they preserve the same statistical interaction pattern around the focal entity. Examples include:
+- **Translocation & Crowding**: Characterizing how the interaction environment of a cargo:transport-receptor complex changes as it traverses the central channel of the nuclear pore complex (NPC).
+- **Macromolecular Binding & Recognition**: Distinguishing strongly, partially, and weakly engaged states between interacting binding partners or flexible interfaces.
+- **Conformational & Folding Dynamics**: Mapping peptide or disordered protein transitions across intramolecular contact topologies (e.g., Chignolin peptide folding).
+
+### 5-Step Workflow
+1. **System Partitioning**: The simulated system is partitioned into a set of discrete interacting components, $\mathcal{C} = \{c_1, \ldots, c_N\}$ (e.g., distinct FG Nups, receptor motifs, or residue groups), together with a focal entity $f$ (e.g., a cargo:NTR complex, ligand, or peptide core) that interacts with subsets of these components.
+2. **Interaction Trajectory**: Each trajectory is converted into an interaction trajectory $I(t)$ recording contacts between $f$ and $\mathcal{C}$.
+3. **Windowed Interaction Histograms**: $I(t)$ is divided into consecutive time windows of duration $\tau$. Interaction statistics in each window are summarized into an interaction histogram $H$ capturing component identities and engagement degree. The histogram is normalized by a fixed reference interaction capacity (to distinguish strongly, partially, and weakly engaged states) and can be augmented with process-specific observables.
+4. **Unsupervised Clustering**: Unsupervised clustering of the histograms identifies a reduced set of recurring interaction states, $\mathcal{S} = \{s_1, \ldots, s_k\}$.
+5. **Lagged Transition Matrix Inference**: Transitions between states are used to infer the lagged transition-probability matrix:
+   $$T_{ij} = P\left(s(t+\tau) = s_j \mid s(t) = s_i\right)$$
+   from which stationary distributions, implied timescales, transport observables, and pathway fluxes are estimated.
+
+> **Modeling Choices vs. Inferred States**: The focal entity, interacting components, contact criteria, window duration, and clustering resolution are user modeling choices, whereas state assignments and transition probabilities are inferred directly from the trajectories.
+
+---
+
 ## Key Features
 
 - **Modular MSM Pipeline**: End-to-end workflow consisting of 4 clean stages:
