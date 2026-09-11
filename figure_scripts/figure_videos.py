@@ -224,9 +224,9 @@ npc_grid_movie_path_b6: str = os.path.join(save_dir_b6, "npc_grid_3x3_imsm_traje
 combined_showcase_movie_path_b6: str = os.path.join(save_dir_b6, "npc_showcase_combined_fades.mp4")
 
 overlay_texts_b6: list[str] = [
-    "Input: Brownian dynamics\ntrajectories from integrative model\nof nucleocytoplasmic transport\n(Raveh, Eliasian et al., PNAS 2025)",
-    "Output: interaction-based Markov\nstate model of nucleocytoplasmic\ntransport",
-    "",
+    "Input:\nBrownian dynamics\ntrajectories from integrative model\nof nucleocytoplasmic transport\n(Raveh, Eliasian et al., PNAS 2025)",
+    "Output:\ninteraction-based Markov\nstate model of\nnucleocytoplasmic transport",
+    "Output:\ninteraction-based Markov\nstate model of\nnucleocytoplasmic transport"
 ]
 
 combined_showcase_result: str = combine_videos_with_fades(
@@ -247,13 +247,18 @@ combined_showcase_result: str = combine_videos_with_fades(
     crf=18,
     overlay_texts=overlay_texts_b6,
     text_font="DejaVu Sans",
-    text_fontsize=28,
+    text_fontsize=21,
     text_font_colors=["white", "black", "black"],
     text_border_colors=["black", "white", "white"],
-    text_border_width=3,
-    text_x="30",
-    text_y="(h-text_h)/2",
-    text_line_spacing=12,
+    text_border_width=1,
+    text_x="40",
+    text_y="40",
+    text_line_spacing=8,
+    box=True,
+    box_colors=["black@0.75", "white@0.9", "white@0.9"],
+    box_border_colors=["gray@0.8", "gray@0.8", "gray@0.8"],
+    box_border_width=2,
+    box_padding=12,
 )
 
 print(f">> Block 6 Complete: Generated combined showcase video at:\n   {combined_showcase_result}")

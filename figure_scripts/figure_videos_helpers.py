@@ -1218,6 +1218,11 @@ def combine_videos_with_fades(
     text_x: str,
     text_y: str,
     text_line_spacing: int,
+    box: bool,
+    box_colors: list[str],
+    box_border_colors: list[str],
+    box_border_width: int,
+    box_padding: int,
 ) -> str:
     """Combine multiple videos into a single video with fade transitions and text overlays using ffmpeg."""
     n_videos: int = len(video_paths)
@@ -1242,6 +1247,14 @@ def combine_videos_with_fades(
     if len(text_border_colors) != n_videos:
         raise ValueError(
             f"Expected {n_videos} text border colors for {n_videos} videos, got {len(text_border_colors)}."
+        )
+    if box and len(box_colors) != n_videos:
+        raise ValueError(
+            f"Expected {n_videos} box colors for {n_videos} videos, got {len(box_colors)}."
+        )
+    if box and len(box_border_colors) != n_videos:
+        raise ValueError(
+            f"Expected {n_videos} box border colors for {n_videos} videos, got {len(box_border_colors)}."
         )
     for path in video_paths:
         if not os.path.exists(path):
@@ -1285,11 +1298,25 @@ def combine_videos_with_fades(
             escaped_tf: str = text_files[i].replace(":", "\\:")
             escaped_x: str = text_x.replace(",", "\\,")
             escaped_y: str = text_y.replace(",", "\\,")
+            if box and box_border_width > 0:
+                base_filter = (
+                    f"{base_filter},drawtext=textfile='{escaped_tf}':font='{text_font}':"
+                    f"fontsize={text_fontsize}:fontcolor=white@0:"
+                    f"x={escaped_x}:y={escaped_y}:line_spacing={text_line_spacing}:"
+                    f"box=1:boxcolor={box_border_colors[i]}:"
+                    f"boxborderw={box_padding + box_border_width}"
+                )
+            box_opt: str = (
+                f":box=1:boxcolor={box_colors[i]}:boxborderw={box_padding}"
+                if box
+                else ""
+            )
             base_filter = (
                 f"{base_filter},drawtext=textfile='{escaped_tf}':font='{text_font}':"
                 f"fontsize={text_fontsize}:fontcolor={text_font_colors[i]}:"
                 f"bordercolor={text_border_colors[i]}:borderw={text_border_width}:"
                 f"x={escaped_x}:y={escaped_y}:line_spacing={text_line_spacing}"
+                f"{box_opt}"
             )
         filter_parts.append(f"{base_filter}[v{i}]")
 

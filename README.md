@@ -3,7 +3,7 @@
 **iMSM** is a computational framework for constructing Markov state models directly from molecular interaction patterns. Rather than clustering configurations solely on Cartesian coordinates or rigid structural metrics, iMSM categorizes and embeds time-resolved macromolecular interaction topologies to discover functional kinetics and transition networks.
 
 This repository accompanies the manuscript:
-> **Interaction-based Markov state models reveal graded interaction networks in nucleocytoplasmic transport**  
+> **Learning interpretable kinetic models for biomolecular interaction networks**  
 > *Roi Eliasian, Yael Hazan, Timna Tzori, and Barak Raveh*  
 > *(Manuscript in preparation / under review)*
 
@@ -88,7 +88,7 @@ Scripts and helper libraries for reproducing the figures and videos in the manus
 
 ```bibtex
 @article{eliasian2026imsm,
-  title={Interaction-based Markov state models reveal graded interaction networks in nucleocytoplasmic transport},
+  title={Learning interpretable kinetic models for biomolecular interaction networks},
   author={Eliasian, Roi and Hazan, Yael and Tzori, Timna and Raveh, Barak},
   journal={In preparation},
   year={2026}
