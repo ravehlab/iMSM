@@ -128,4 +128,3 @@ Scripts and helper libraries for reproducing the figures and videos in the manus
 ```
 
 [^skm]: Related, but not identical, clustering approaches: [Charalampidis (2005)](https://doi.org/10.1109/TPAMI.2005.230) and [Mukuta and Harada (2023)](https://arxiv.org/abs/1906.01857).
-<img width="518" height="683" alt="image" src="https://github.com/user-attachments/assets/8dfcae4d-88a6-4b57-bf32-e9ad2e94234e" />
